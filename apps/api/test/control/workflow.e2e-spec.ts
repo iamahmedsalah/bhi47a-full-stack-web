@@ -1083,6 +1083,15 @@ describe('Control real replica-set persistence, approval and Grades visibility',
       workflowState: 'APPROVED',
       releaseActive: false,
     });
+    const dashboard = async () =>
+      (
+        await sheets.dashboard(actor, { academicYear: year, semester: 'first' })
+      ).items.find((entry) => entry.code === 'SYNTH101');
+    expect(await dashboard()).toMatchObject({
+      recordedComponents: 3,
+      results: 0,
+      passed: 0,
+    });
     expect(
       (await workbook.workbook(actor, finalBefore!.sheetId!)).componentStates,
     ).toEqual({
@@ -1104,6 +1113,24 @@ describe('Control real replica-set persistence, approval and Grades visibility',
         .find((entry) => entry.code === 'SYNTH101')
         ?.components.find((entry) => entry.key === 'final'),
     ).toMatchObject({ releaseActive: true });
+    expect(await dashboard()).toMatchObject({
+      recordedComponents: 3,
+      results: 1,
+      passed: 1,
+    });
+    const unassigned = await sheets.dashboard(
+      {
+        ...actor,
+        _id: new Types.ObjectId().toHexString(),
+        role: 'staff',
+        permissions: [
+          PERMISSIONS.CONTROL_ACCESS,
+          PERMISSIONS.CONTROL_SHEETS_VIEW,
+        ],
+      },
+      { academicYear: year, semester: 'first' },
+    );
+    expect(unassigned.items).toEqual([]);
     const result = await grades.findStudentResults(String(studentId));
     expect(result).toHaveLength(2);
     expect(result.some((grade) => grade.examType === 'coursework')).toBe(false);
@@ -1219,6 +1246,11 @@ describe('Control real replica-set persistence, approval and Grades visibility',
       academicWarnings: 1,
     });
     await grades.publishGrades({ ...scope, isPublished: false }, reviewer._id);
+    expect(
+      (
+        await sheets.dashboard(actor, { academicYear: year, semester: 'first' })
+      ).items.find((entry) => entry.code === scope.courseCode),
+    ).toMatchObject({ results: 0, passed: 0 });
     expect(await grades.findStudentResults(String(studentId))).toHaveLength(0);
     expect(
       await connection
@@ -1901,6 +1933,17 @@ describe('Control real replica-set persistence, approval and Grades visibility',
           },
         });
         expect(final).not.toHaveProperty('officialResult.components');
+        expect(
+          (
+            await sheets.dashboard(actor, {
+              academicYear: year,
+              semester: 'first',
+            })
+          ).items.find((entry) => entry.code === code),
+        ).toMatchObject({
+          results: status === 'incomplete' ? 0 : 1,
+          passed: 0,
+        });
       } finally {
         windowOpen = false;
       }

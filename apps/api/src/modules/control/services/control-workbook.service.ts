@@ -430,6 +430,12 @@ export class ControlWorkbookService {
               : PERMISSIONS.CONTROL_SHEETS_APPROVE
             : PERMISSIONS.CONTROL_SHEETS_REVIEW,
     );
+    if (
+      dto.action === 'SUBMIT' &&
+      typeof this.access.assertCourseGradeWrite === 'function'
+    ) {
+      await this.access.assertCourseGradeWrite(user, targetSheet.courseId);
+    }
     const resolvedSheetId = String(targetSheet?._id ?? sheetId);
     const session = await this.sheets.db.startSession();
     try {
@@ -1289,6 +1295,7 @@ export class ControlWorkbookService {
   ) {
     this.access.assertPermission(user, PERMISSIONS.CONTROL_IMPORT);
     const detail = await this.sheetService.getSheet(user, sheetId);
+    await this.access.assertCourseGradeWrite(user, detail.course.id);
     if (detail.sheet.workflowState === 'PARTIAL_OPEN') {
       throw new ConflictException(
         'لا يمكن استيراد ملف إكسيل أثناء دورة الرصد الجزئي؛ يرجى تعديل درجات الطلاب المحددين مباشرة في الجدول',
@@ -1564,6 +1571,7 @@ export class ControlWorkbookService {
   async commit(user: AuthenticatedUser, sheetId: string, previewId: string) {
     this.access.assertPermission(user, PERMISSIONS.CONTROL_IMPORT);
     const detail = await this.sheetService.getSheet(user, sheetId);
+    await this.access.assertCourseGradeWrite(user, detail.course.id);
     if (detail.sheet.workflowState === 'PARTIAL_OPEN') {
       throw new ConflictException(
         'لا يمكن استيراد ملف إكسيل أثناء دورة الرصد الجزئي؛ يرجى تعديل درجات الطلاب المحددين مباشرة في الجدول',

@@ -7,7 +7,7 @@ import React, { useState, Suspense } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { useRouter, useParams } from 'next/navigation';
-import api, { getApiErrorMessage, PaginatedResponse, apiBaseUrl } from '@/lib/api';
+import api, { getApiErrorMessage, PaginatedResponse } from '@/lib/api';
 import {
   Download,
   Plus,
@@ -27,6 +27,7 @@ import {
   Users,
   Layers,
   RotateCcw,
+  AlertTriangle,
 } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { listStaff } from '@/features/staff/api';
@@ -34,6 +35,7 @@ import {
   COURSE_LEVEL_VALUES,
   MAX_COURSE_DOCTORS,
   COURSE_BOOK_MAX_BYTES,
+  PERMISSIONS,
   getCourseCurricula,
   serializeCourseCurricula,
   courseCurriculumSummary,
@@ -62,6 +64,8 @@ import { TableActionButton } from '@/components/ui/table-action-button';
 import { CourseStudentEnrollmentDialog } from '@/features/courses/components/course-student-enrollment-dialog';
 import { StudentCourseEnrollmentDialog } from '@/features/courses/components/student-course-enrollment-dialog';
 import { CourseMaterialsDialog } from '@/features/courses/components/course-materials-dialog';
+import { CourseSyllabusPreviewDialog } from '@/features/courses/components/course-syllabus-preview-dialog';
+import { CourseStaffAccessDialog } from '@/features/courses/components/course-staff-access-dialog';
 import { CourseEnrolledStudentsDialog } from '@/features/courses/components/course-enrolled-students-dialog';
 
 // shadcn
@@ -102,6 +106,7 @@ interface Course {
   curricula?: CourseCurriculum[];
   syllabusPdfUrl?: string;
   syllabusPdfName?: string;
+  syllabusFileAvailable?: boolean;
   syllabusUpdatedAt?: string;
   doctorId?: string | null;
   doctorIds?: string[];
@@ -153,6 +158,7 @@ interface CourseFormDialogProps {
   t: ReturnType<typeof useTranslations>;
   tCommon: ReturnType<typeof useTranslations>;
   canManageBook?: boolean;
+  canAssignStaff?: boolean;
 }
 
 const MAX_COURSE_FILE_SIZE_BYTES = COURSE_BOOK_MAX_BYTES;
@@ -167,6 +173,7 @@ function CourseFormDialog({
   t,
   tCommon,
   canManageBook = true,
+  canAssignStaff = false,
 }: CourseFormDialogProps) {
   const [name, setName] = useState(initialValues.name || '');
   const [nameAr, setNameAr] = useState(initialValues.nameAr || initialValues.name || '');
@@ -186,6 +193,7 @@ function CourseFormDialog({
   const [removeCover, setRemoveCover] = useState(false);
   const [currentSyllabusUrl, setCurrentSyllabusUrl] = useState(initialValues.syllabusPdfUrl || '');
   const [currentSyllabusName, setCurrentSyllabusName] = useState(initialValues.syllabusPdfName || '');
+  const [isSyllabusPreviewOpen, setIsSyllabusPreviewOpen] = useState(false);
   const [doctorIds, setDoctorIds] = useState<string[]>(() => getCourseStaffIds(initialValues).doctorIds);
   const [teachingAssistantIds, setTeachingAssistantIds] = useState<string[]>(() => getCourseStaffIds(initialValues).teachingAssistantIds);
   const [coverImageUrl, setCoverImageUrl] = useState(initialValues.coverImageUrl || '');
@@ -197,6 +205,7 @@ function CourseFormDialog({
   const staffQuery = useQuery({
     queryKey: ['staff-options-for-courses'],
     queryFn: () => listStaff({ page: 1, limit: 100, status: 'active' }),
+    enabled: open && canAssignStaff,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -341,9 +350,9 @@ function CourseFormDialog({
         isActive,
         syllabusFile: removeSyllabus ? null : syllabusFile,
         coverImageFile: removeCover ? null : coverImageFile,
-        ...(!initialValues._id || doctorIds.join(',') !== getCourseStaffIds(initialValues).doctorIds.join(',')
+        ...(canAssignStaff && (!initialValues._id || doctorIds.join(',') !== getCourseStaffIds(initialValues).doctorIds.join(','))
           ? { doctorId: doctorIds[0] || null, doctorIds: doctorIds.slice(0, MAX_COURSE_DOCTORS) } : {}),
-        ...(!initialValues._id || teachingAssistantIds.join(',') !== getCourseStaffIds(initialValues).teachingAssistantIds.join(',')
+        ...(canAssignStaff && (!initialValues._id || teachingAssistantIds.join(',') !== getCourseStaffIds(initialValues).teachingAssistantIds.join(','))
           ? { teachingAssistantIds } : {}),
         coverImageUrl: removeCover ? '' : (coverImageUrl.trim() || undefined),
         removeSyllabus,
@@ -430,6 +439,7 @@ function CourseFormDialog({
               <Input type="text" value={department} onChange={(e) => setDepartment(e.target.value)} placeholder={locale === 'ar' ? 'شعبة عامة أو نظم معلومات الأعمال أو المحاسبة والمراجعة' : 'General Division, Business Information Systems, Accounting and Auditing'} />
             </div>
             {/* Optional course doctors */}
+            {canAssignStaff && <>
             <div className="space-y-1.5 sm:col-span-2">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-semibold text-muted">
@@ -591,6 +601,7 @@ function CourseFormDialog({
                 )}
               </div>
             </div>
+            </>}
           </div>
 
           {/* Section 5: Prerequisites and Course Type */}
@@ -643,16 +654,17 @@ function CourseFormDialog({
                     </label>
                     {currentSyllabusUrl && !removeSyllabus && (
                       <div className="flex items-center gap-2">
-                        <a
-                          href={initialValues._id ? `${apiBaseUrl}/courses/${initialValues._id}/syllabus/download` : currentSyllabusUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs font-medium text-primary hover:underline flex items-center gap-1"
-                          title={locale === 'ar' ? 'معاينة المنهج' : 'View Syllabus'}
-                        >
-                          <Eye className="h-3 w-3" />
-                          <span>{locale === 'ar' ? 'معاينة' : 'View'}</span>
-                        </a>
+                        {initialValues._id && initialValues.syllabusFileAvailable !== false && (
+                          <button
+                            type="button"
+                            onClick={() => setIsSyllabusPreviewOpen(true)}
+                            className="text-xs font-medium text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                            title={locale === 'ar' ? 'معاينة المنهج' : 'View Syllabus'}
+                          >
+                            <Eye className="h-3 w-3" />
+                            <span>{locale === 'ar' ? 'معاينة' : 'View'}</span>
+                          </button>
+                        )}
                         <Button
                           type="button"
                           variant="outline"
@@ -669,6 +681,17 @@ function CourseFormDialog({
                       </div>
                     )}
                   </div>
+
+                  {currentSyllabusUrl && !removeSyllabus && !syllabusFile && initialValues.syllabusFileAvailable === false && (
+                    <div className="my-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-[11px] text-amber-500 flex items-center gap-1.5">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                      <span>
+                        {locale === 'ar'
+                          ? 'الملف المادي غير متوفر على هذا الخادم — يرجى إعادة رفع ملف الـ PDF'
+                          : 'Syllabus PDF file is missing on this server — please re-upload'}
+                      </span>
+                    </div>
+                  )}
 
                   {removeSyllabus ? (
                     <div className="my-2 rounded-lg bg-amber-500/10 border border-amber-500/20 p-2 text-xs text-amber-400 flex items-center justify-between">
@@ -879,6 +902,18 @@ function CourseFormDialog({
           </DialogFooter>
         </form>
       </DialogContent>
+      {initialValues._id && (
+        <CourseSyllabusPreviewDialog
+          courseId={initialValues._id}
+          courseCode={code || initialValues.code || ''}
+          courseName={locale === 'ar' ? nameAr || name : nameEn || name}
+          fileName={currentSyllabusName}
+          updatedAt={initialValues.syllabusUpdatedAt}
+          open={isSyllabusPreviewOpen}
+          onOpenChange={setIsSyllabusPreviewOpen}
+          locale={locale}
+        />
+      )}
     </Dialog>
   );
 }
@@ -905,7 +940,13 @@ function UploadCoursePdfDialog({
   const startBookUpload = useStartBookUpload();
   const [removing, setRemoving] = useState(false);
   const [error, setError] = useState('');
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const capabilities = useCourseBookCapabilities(course?._id, open);
+  const isBookMissing =
+    Boolean(course?.syllabusPdfUrl) &&
+    (capabilities.data?.bookFileAvailable === false ||
+      course?.syllabusFileAvailable === false);
 
   const [prevOpen, setPrevOpen] = useState(open);
   if (open !== prevOpen) {
@@ -922,6 +963,7 @@ function UploadCoursePdfDialog({
 
   const handleUpload = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!capabilities.data?.canEditBook) return;
     if (!file) {
       setError(isAr ? 'يرجى اختيار ملف PDF لرفعه' : 'Please select a PDF file to upload');
       return;
@@ -949,6 +991,7 @@ function UploadCoursePdfDialog({
   };
 
   const handleRemove = async () => {
+    if (!capabilities.data?.canDeleteBook) return;
     setRemoving(true);
     setError('');
     try {
@@ -996,7 +1039,12 @@ function UploadCoursePdfDialog({
               <span className="font-semibold text-muted-foreground">
                 {isAr ? 'الحالة الحالية:' : 'Current Status:'}
               </span>
-              {course.syllabusPdfUrl ? (
+              {course.syllabusPdfUrl && isBookMissing ? (
+                <span className="inline-flex items-center gap-1.5 font-bold text-amber-500">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  {isAr ? 'الملف مفقود على هذا الخادم' : 'File Missing on Server'}
+                </span>
+              ) : course.syllabusPdfUrl ? (
                 <span className="inline-flex items-center gap-1.5 font-bold text-emerald-400">
                   <span className="h-2 w-2 rounded-full bg-emerald-400" />
                   {isAr ? 'تم رفع المنهج مسبقاً' : 'Syllabus Attached'}
@@ -1009,22 +1057,31 @@ function UploadCoursePdfDialog({
               )}
             </div>
 
+            {isBookMissing && (
+              <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-[11px] text-amber-500 leading-relaxed">
+                {isAr
+                  ? 'بيانات المنهج مسجلة في قاعدة البيانات، لكن ملف الـ PDF غير متوفر في وحدة التخزين الحالية. يرجى إعادة رفع ملف الـ PDF أو حذف السجل القديم.'
+                  : 'Syllabus metadata exists in the database, but the PDF file is missing from local storage. Please re-upload the PDF or remove the stale entry.'}
+              </p>
+            )}
+
             {course.syllabusPdfUrl && (
               <div className="flex items-center justify-between pt-1 border-t border-border/50">
                 <span className="font-mono text-[11px] text-muted-foreground truncate max-w-60">
                   📄 {course.syllabusPdfName || `${course.code}_syllabus.pdf`}
                 </span>
                 <div className="flex items-center gap-2">
-                  <a
-                    href={`${apiBaseUrl}/courses/${course._id}/syllabus/download`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
-                  >
-                    <Eye className="h-3 w-3" />
-                    <span>{isAr ? 'معاينة' : 'Preview'}</span>
-                  </a>
-                  <Button
+                  {!isBookMissing && (
+                    <button
+                      type="button"
+                      onClick={() => setIsPreviewOpen(true)}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline cursor-pointer"
+                    >
+                      <Eye className="h-3 w-3" />
+                      <span>{isAr ? 'معاينة' : 'Preview'}</span>
+                    </button>
+                  )}
+                  {capabilities.data?.canDeleteBook && <Button
                     type="button"
                     variant="ghost"
                     size="sm"
@@ -1034,14 +1091,15 @@ function UploadCoursePdfDialog({
                   >
                     {removing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
                     <span>{isAr ? 'حذف' : 'Remove'}</span>
-                  </Button>
+                  </Button>}
                 </div>
               </div>
             )}
           </div>
 
-          {/* Upload input area */}
-          <div className="space-y-2">
+          {capabilities.isFetching && <p role="status">{isAr ? 'جارٍ تحميل صلاحيات الكتاب…' : 'Loading book permissions…'}</p>}
+          {capabilities.isError && <p role="alert">{getApiErrorMessage(capabilities.error)}</p>}
+          {capabilities.data?.canEditBook && <div className="space-y-2">
             <label className="text-xs font-semibold text-foreground">
               {isAr ? 'اختيار ملف PDF جديد:' : 'Select New PDF File:'}
             </label>
@@ -1085,7 +1143,7 @@ function UploadCoursePdfDialog({
                 }}
               />
             </div>
-          </div>
+          </div>}
 
           <DialogFooter className="mt-4 gap-2 border-t border-border pt-4">
             <Button
@@ -1096,19 +1154,40 @@ function UploadCoursePdfDialog({
             >
               {isAr ? 'إلغاء' : 'Cancel'}
             </Button>
-            <Button
+            {capabilities.data?.canEditBook && <Button
               type="submit"
               disabled={loading || !file}
               className="flex items-center gap-2 bg-primary font-semibold text-white hover:bg-primary-hover rounded-squircle text-xs"
             >
               {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               <span>{isAr ? 'رفع وحفظ المنهج' : 'Upload & Save Syllabus'}</span>
-            </Button>
+            </Button>}
           </DialogFooter>
         </form>
       </DialogContent>
+      <CourseSyllabusPreviewDialog
+        courseId={course._id}
+        courseCode={course.code}
+        courseName={isAr ? course.nameAr || course.name : course.nameEn || course.name}
+        fileName={course.syllabusPdfName}
+        updatedAt={course.syllabusUpdatedAt}
+        open={isPreviewOpen}
+        onOpenChange={setIsPreviewOpen}
+        locale={locale}
+      />
     </Dialog>
   );
+}
+
+function useCourseBookCapabilities(courseId: string | undefined, open: boolean) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ['course-book-capabilities', courseId, user?._id],
+    enabled: open && Boolean(courseId),
+    queryFn: async () => (await api.get<{ canEditBook: boolean; canDeleteBook: boolean; bookFileAvailable?: boolean }>(
+      `/admin/courses/${courseId}/syllabus/capabilities`,
+    )).data,
+  });
 }
 
 /* ─── Main Page ───────────────────────────────────────── */
@@ -1143,8 +1222,10 @@ function CoursesPageContent() {
   const [isExporting, setIsExporting] = useState(false);
   const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
+  const [courseForStaffAccess, setCourseForStaffAccess] = useState<string | null>(null);
   const [selectedCourseForPdf, setSelectedCourseForPdf] = useState<Course | null>(null);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
+  const [courseForSyllabusPreview, setCourseForSyllabusPreview] = useState<Course | null>(null);
   const [selectedCourseForMaterials, setSelectedCourseForMaterials] = useState<Course | null>(null);
   const [isMaterialsOpen, setIsMaterialsOpen] = useState(false);
   const [courseToDelete, setCourseToDelete] = useState<Course | null>(null);
@@ -1155,6 +1236,7 @@ function CoursesPageContent() {
   const [enrollmentCourseId, setEnrollmentCourseId] = useState<string | null>(null);
   const [selectedEnrolledCourse, setSelectedEnrolledCourse] = useState<Course | null>(null);
   const [isEnrolledStudentsOpen, setIsEnrolledStudentsOpen] = useState(false);
+  const editBookCapabilities = useCourseBookCapabilities(selectedCourse?._id, isEditOpen);
 
   const coursesQuery = useQuery({
     queryKey: ['courses', search, activeLevel, activeSemester, activeDepartment, page, limit, user?._id],
@@ -1187,9 +1269,6 @@ function CoursesPageContent() {
     const res = await api.post<Course, { data: Course } | Course>('/admin/courses', coursePayload);
     const newCourseId = 'data' in res ? res.data._id : res._id;
     if (newCourseId) {
-      if (syllabusFile) {
-        startBookUpload(newCourseId, `${locale === 'ar' ? 'كتاب المقرر' : 'Course book'} · ${coursePayload.code}`, syllabusFile);
-      }
       if (coverImageFile) {
         try {
           const fd = new FormData();
@@ -1202,6 +1281,9 @@ function CoursesPageContent() {
               : 'Course added, but cover image upload failed',
           );
         }
+      }
+      if (syllabusFile) {
+        startBookUpload(newCourseId, `${locale === 'ar' ? 'كتاب المقرر' : 'Course book'} · ${coursePayload.code}`, syllabusFile);
       }
     }
     toast.success(
@@ -1235,23 +1317,7 @@ function CoursesPageContent() {
 
     await api.patch(`/admin/courses/${selectedCourse._id}`, updatePayload);
 
-    if (removeSyllabus) {
-      try {
-        await api.delete(`/admin/courses/${selectedCourse._id}/syllabus`);
-      } catch {
-        // null payload already handled deletion
-      }
-    } else if (syllabusFile) {
-      startBookUpload(selectedCourse._id, `${locale === 'ar' ? 'كتاب المقرر' : 'Course book'} · ${selectedCourse.code}`, syllabusFile);
-    }
-
-    if (removeCover) {
-      try {
-        await api.delete(`/admin/courses/${selectedCourse._id}/cover-image`);
-      } catch {
-        // null payload already handled deletion
-      }
-    } else if (coverImageFile) {
+    if (!removeCover && coverImageFile) {
       try {
         const fd = new FormData();
         fd.append('file', coverImageFile);
@@ -1263,6 +1329,9 @@ function CoursesPageContent() {
             : 'Course updated, but cover image upload failed',
         );
       }
+    }
+    if (!removeSyllabus && syllabusFile) {
+      startBookUpload(selectedCourse._id, `${locale === 'ar' ? 'كتاب المقرر' : 'Course book'} · ${selectedCourse.code}`, syllabusFile);
     }
 
     toast.success(
@@ -1394,32 +1463,38 @@ function CoursesPageContent() {
       header: locale === 'ar' ? 'المنهج (PDF)' : 'Syllabus (PDF)',
       render: (course) => (
         <TableCell className="p-4">
-          {course.syllabusPdfUrl ? (
+          {course.syllabusPdfUrl && course.syllabusFileAvailable === false ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (canManageBook) {
+                  setSelectedCourseForPdf(course);
+                  setIsPdfModalOpen(true);
+                } else {
+                  setCourseForSyllabusPreview(course);
+                }
+              }}
+              className="inline-flex items-center gap-1.5 rounded-squircle border border-amber-500/35 bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 transition-all cursor-pointer"
+              title={
+                locale === 'ar'
+                  ? 'ملف المنهج مفقود على هذا الخادم — اضغط لإعادة الرفع'
+                  : 'Syllabus PDF missing on this server — click to re-upload'
+              }
+            >
+              <AlertTriangle className="h-3.5 w-3.5" />
+              <span>{locale === 'ar' ? 'ملف مفقود' : 'Missing PDF'}</span>
+            </button>
+          ) : course.syllabusPdfUrl ? (
             <div className="flex items-center gap-1.5">
-              <a
-                href={`${apiBaseUrl}/courses/${course._id}/syllabus/download`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-squircle border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary/20 transition-all"
+              <button
+                type="button"
+                onClick={() => setCourseForSyllabusPreview(course)}
+                className="inline-flex items-center gap-1.5 rounded-squircle border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary/20 transition-all cursor-pointer"
                 title={course.syllabusPdfName || undefined}
               >
                 <FileText className="h-3.5 w-3.5" />
                 <span>{locale === 'ar' ? 'عرض PDF' : 'View PDF'}</span>
-              </a>
-              {canManageBook && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setSelectedCourseForPdf(course);
-                    setIsPdfModalOpen(true);
-                  }}
-                  className="h-7 w-7 p-0 rounded-squircle text-muted-foreground hover:text-primary hover:bg-primary/10"
-                  title={locale === 'ar' ? 'استبدال أو إدارة ملف المنهج' : 'Replace or manage syllabus'}
-                >
-                  <UploadCloud className="h-3.5 w-3.5" />
-                </Button>
-              )}
+              </button>
             </div>
           ) : canManageBook ? (
             <Button
@@ -1589,8 +1664,7 @@ function CoursesPageContent() {
                   <span>{locale === 'ar' ? 'المحاضرات والسكاشن التعليمية' : 'Lectures & Sections'}</span>
                 </DropdownMenu.Item>
 
-                {/* Upload Syllabus PDF (Doctor or Admin only, hidden for TA) */}
-                {canManageBook && (
+                {(canManageBook || course.syllabusPdfUrl) && (
                   <DropdownMenu.Item
                     onClick={() => {
                       setSelectedCourseForPdf(course);
@@ -1599,7 +1673,23 @@ function CoursesPageContent() {
                     className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-primary/10 hover:text-primary transition-colors"
                   >
                     <FileText className="h-3.5 w-3.5 text-primary" />
-                    <span>{locale === 'ar' ? 'رفع / تحديث منهج المقرر (PDF)' : 'Upload / Update Syllabus PDF'}</span>
+                    <span>{locale === 'ar' ? 'كتاب المقرر (PDF)' : 'Course Book (PDF)'}</span>
+                  </DropdownMenu.Item>
+                )}
+
+                {(isAdmin ||
+                  Boolean(
+                    user?.permissions?.includes(PERMISSIONS.CONTROL_ACCESS) &&
+                      user?.permissions?.includes(
+                        PERMISSIONS.CONTROL_STAFF_ENTRY_MANAGE,
+                      ),
+                  )) && (
+                  <DropdownMenu.Item
+                    onSelect={() => setCourseForStaffAccess(course._id)}
+                    className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none hover:bg-primary/10 hover:text-primary"
+                  >
+                    <UserCheck className="h-3.5 w-3.5" />
+                    <span>{locale === 'ar' ? 'صلاحيات المادة والتحكم في الرصد' : 'Course & Grade Entry Permissions'}</span>
                   </DropdownMenu.Item>
                 )}
 
@@ -2061,7 +2151,7 @@ function CoursesPageContent() {
                       <span>{locale === 'ar' ? 'المحاضرات والسكاشن' : 'Lectures & Sections'}</span>
                     </Button>
 
-                    {canManageBook && (
+                    {(canManageBook || course.syllabusPdfUrl) && (
                       <Button
                         type="button"
                         variant="outline"
@@ -2088,7 +2178,8 @@ function CoursesPageContent() {
         open={isAddOpen}
         onOpenChange={setIsAddOpen}
         mode="add"
-        canManageBook={canManageBook}
+        canManageBook={isAdmin}
+        canAssignStaff={isAdmin}
         onSubmit={handleAdd}
         t={t}
         tCommon={tCommon}
@@ -2099,12 +2190,44 @@ function CoursesPageContent() {
         open={isEditOpen}
         onOpenChange={setIsEditOpen}
         mode="edit"
-        canManageBook={canManageBook}
+        canManageBook={Boolean(editBookCapabilities.data?.canEditBook)}
+        canAssignStaff={isAdmin}
         initialValues={selectedCourse || undefined}
         onSubmit={handleEdit}
         t={t}
         tCommon={tCommon}
       />
+
+      {courseForStaffAccess && (
+        <CourseStaffAccessDialog
+          key={courseForStaffAccess}
+          courseId={courseForStaffAccess}
+          courseCode={courses.find((c) => c._id === courseForStaffAccess)?.code}
+          courseTitle={
+            courses.find((c) => c._id === courseForStaffAccess)
+              ? getCourseName(courses.find((c) => c._id === courseForStaffAccess)!)
+              : undefined
+          }
+          isAr={locale === 'ar'}
+          onClose={() => setCourseForStaffAccess(null)}
+        />
+      )}
+
+      {/* Direct Course Syllabus PDF Preview Dialog */}
+      {courseForSyllabusPreview && (
+        <CourseSyllabusPreviewDialog
+          courseId={courseForSyllabusPreview._id}
+          courseCode={courseForSyllabusPreview.code}
+          courseName={getCourseName(courseForSyllabusPreview)}
+          fileName={courseForSyllabusPreview.syllabusPdfName}
+          updatedAt={courseForSyllabusPreview.syllabusUpdatedAt}
+          open={Boolean(courseForSyllabusPreview)}
+          onOpenChange={(open) => {
+            if (!open) setCourseForSyllabusPreview(null);
+          }}
+          locale={locale}
+        />
+      )}
 
       {/* Direct Course Syllabus PDF Dialog */}
       <UploadCoursePdfDialog
@@ -2137,7 +2260,7 @@ function CoursesPageContent() {
         courseName={
           locale === 'ar'
             ? selectedCourseForMaterials?.nameAr || selectedCourseForMaterials?.name || ''
-            : selectedCourseForMaterials?.name || ''
+            : selectedCourseForMaterials?.nameEn || selectedCourseForMaterials?.name || ''
         }
         locale={locale}
       />

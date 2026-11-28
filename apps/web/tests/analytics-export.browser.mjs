@@ -17,6 +17,8 @@ const { ANALYTICS_REPORT_SHEETS } = requireWeb('@student-portal/shared');
 const output = path.join(root, 'outputs/analytics-export');
 await fs.mkdir(output, { recursive: true });
 await fs.writeFile(path.join(output, 'loader.cjs'), `const ts = require(${JSON.stringify(requireWeb.resolve('typescript'))}); module.exports = source => ts.transpileModule(source, {compilerOptions:{jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext,esModuleInterop:true}}).outputText;`);
+await fs.writeFile(path.join(output, 'auth.ts'), `export const useAuth=()=>({user:{_id:'fixture',role:'admin'}});`);
+await fs.writeFile(path.join(output, 'navigation.ts'), `export const useRouter=()=>({push: path => location.assign(path)});`);
 await fs.writeFile(path.join(output, 'api.ts'), `
 export const getApiErrorMessage = (e, fallback) => e.message || fallback;
 export default {get:async (url, options) => {
@@ -25,6 +27,10 @@ export default {get:async (url, options) => {
   const response = await fetch(url+'?'+query);
   if(!response.ok) throw await response.json();
   return options?.responseType === 'blob' ? response.blob() : {data: await response.json()}; // Match binary vs JSON API response shapes.
+}, patch:async (url, dto) => {
+  const response = await fetch(url,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify(dto)});
+  if(!response.ok) throw await response.json();
+  return {data:await response.json()};
 }};`);
 await fs.writeFile(path.join(output, 'entry.tsx'), `
 import React,{useState} from 'react'; import {createRoot} from 'react-dom/client';
@@ -34,20 +40,25 @@ import {DeferredAnalyticsSummary} from '${path.join(web, 'src/features/analytics
 import ar from '${path.join(web, 'src/messages/ar.json').replaceAll('\\', '/')}';
 import en from '${path.join(web, 'src/messages/en.json').replaceAll('\\', '/')}';
 import {AnalyticsExportModal} from '${path.join(web, 'src/features/analytics/components/analytics-export-modal.tsx').replaceAll('\\', '/')}';
+import {ControlDashboardAnalytics} from '${path.join(web, 'src/features/control/components/control-dashboard-analytics.tsx').replaceAll('\\', '/')}';
+import {StudentLoginShortcut} from '${path.join(web, 'src/components/dashboard/quick-actions.tsx').replaceAll('\\', '/')}';
 const locale = new URLSearchParams(location.search).get('locale') || 'en';
 document.documentElement.dir = locale === 'ar' ? 'rtl':'ltr';
 const client=new QueryClient();
-function App(){const [open,setOpen]=useState(true);if(location.search.includes('performance'))return <QueryClientProvider client={client}><div style={{height:2500}}>Dashboard above fold</div><div id="advanced-performance"><DeferredAnalyticsSummary isAr={false}/></div></QueryClientProvider>;return <NextIntlClientProvider locale={locale} messages={locale === 'ar' ? ar:en} timeZone="Africa/Cairo"><button id="reopen" onClick={()=>setOpen(true)}>Open export</button><AnalyticsExportModal open={open} onOpenChange={setOpen} locale={locale}/></NextIntlClientProvider>}
-createRoot(document.getElementById('root')).render(<App/>);`);
+function App(){const [open,setOpen]=useState(true);if(location.search.includes('performance'))return <><div style={{height:2500}}>Dashboard above fold</div><div id="advanced-performance"><DeferredAnalyticsSummary isAr={false}/></div></>;if(location.search.includes('control'))return <ControlDashboardAnalytics/>;if(location.search.includes('maintenance'))return <StudentLoginShortcut locale={locale}/>;return <><button id="reopen" onClick={()=>setOpen(true)}>Open export</button><AnalyticsExportModal open={open} onOpenChange={setOpen} locale={locale}/></>}
+createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><NextIntlClientProvider locale={locale} messages={locale === 'ar' ? ar:en} timeZone="Africa/Cairo"><App/></NextIntlClientProvider></QueryClientProvider>);`);
 await new Promise((resolve, reject) => webpack({
   mode:'development', devtool:false, target:'web', entry:path.join(output, 'entry.tsx'),
   output:{path:output,filename:'bundle.js',publicPath:'/'},
-  resolve:{extensions:['.tsx','.ts','.jsx','.js'],modules:[path.join(web,'node_modules'),'node_modules'],alias:{'@/lib/api':path.join(output,'api.ts'),'@':path.join(web,'src')}},
+  resolve:{extensions:['.tsx','.ts','.jsx','.js'],modules:[path.join(web,'node_modules'),'node_modules'],alias:{'next/navigation':path.join(output,'navigation.ts'),'@/lib/api':path.join(output,'api.ts'),'@/providers/auth-provider':path.join(output,'auth.ts'),'@':path.join(web,'src')}},
   module:{rules:[{test:/\.tsx?$/,exclude:/node_modules/,use:path.join(output,'loader.cjs')}]},
 },(error,stats)=>error || stats.hasErrors() ? reject(error || new Error(stats.toString({all:false,errors:true}))) : resolve()));
 const css = await requireWeb('postcss')([requireWeb('@tailwindcss/postcss')({base:web})]).process(await fs.readFile(path.join(web,'src/app/globals.css'),'utf8'),{from:path.join(web,'src/app/globals.css')});
 await fs.writeFile(path.join(output,'styles.css'),css.css);
 const requests = [];
+const controlRequests = [];
+const maintenanceWrites = [];
+let portalSettings = { registrationVisible: true, syllabiVisible: true, studentLoginMaintenance: false };
 let failNext = false;
 let overviewRequests = 0;
 let hold = false;
@@ -55,6 +66,39 @@ let release;
 const server = http.createServer(async (req,res) => {
   try {
     const url = new URL(req.url,'http://localhost');
+    if (url.pathname === '/admin/portal-settings') {
+      if (req.method === 'PATCH') {
+        let body = '';
+        for await (const chunk of req) body += chunk;
+        const patch = JSON.parse(body);
+        maintenanceWrites.push(patch);
+        portalSettings = { ...portalSettings, ...patch };
+      }
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify(portalSettings));
+      return;
+    }
+    if (url.pathname === '/admin/academic-years/options') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ items: ['2027-2028', '2026-2027', '2025-2026'], currentYear: '2026-2027', currentSemester: 'first' }));
+      return;
+    }
+    if (url.pathname === '/admin/control/dashboard') {
+      const term = Object.fromEntries(url.searchParams);
+      controlRequests.push(term);
+      const exam = (passed, total, published, bannedCount = 0) => ({
+        published,
+        passRate: { passed, total, presentCount: total - bannedCount, bannedCount, threshold: 18 },
+      });
+      const items = term.semester === 'first' ? [
+        { courseId: 'one', code: 'A01', name: 'Alpha', level: '1', rosterCount: 2, recorded: 3, results: 0, exams: { midterm: exam(1, 1, true), final: exam(0, 0, false) } },
+        { courseId: 'two', code: 'A02', name: 'Beta', level: '2', rosterCount: 8, recorded: 21, results: 2, exams: { midterm: exam(4, 7, false, 1), final: exam(1, 2, true) } },
+        { courseId: 'three', code: 'A03', name: 'Gamma', level: '2', rosterCount: 3, recorded: 3, results: 0, exams: { midterm: exam(0, 0, false), final: exam(0, 3, false) } },
+      ] : [];
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ items }));
+      return;
+    }
     if(url.pathname === '/admin/analytics/overview') { overviewRequests++; res.setHeader('Content-Type','application/json'); res.end(JSON.stringify({kpis:{totalQuizzes:0,publishedQuizzes:0,activeQuizzes:0,avgQuizParticipationRate:0,avgQuizPassRate:0,totalCourses:0,activeCourses:0},staffPerformance:[],coursePerformance:[]}));return;}
     if(url.pathname === '/admin/analytics/report/export') {
       const query = Object.fromEntries(url.searchParams); requests.push(query);
@@ -108,10 +152,9 @@ try {
     await page.getByRole('checkbox',{name:m.sheets.students,exact:true}).check();
     await select(m.level,m.levelValue.replace('{level}','3'));
     await select(m.department,locale === 'ar'?'المحاسبة والمراجعة':'Accounting and Auditing');
-    const year=page.getByRole('textbox',{name:m.academicYear,exact:true});
-    assert.equal(await year.getAttribute('dir'),'ltr');
-    await year.fill('2027-2027');assert.equal(await page.getByRole('button',{name:m.downloadSelected,exact:true}).isDisabled(),true);
-    await year.fill('2027-2028');await select(m.semester,m.semesters.first);
+    await page.getByRole('button',{name:m.academicYear,exact:true}).click();
+    await page.getByRole('option',{name:'2027-2028',exact:true}).click();
+    await select(m.semester,m.semesters.first);
     await page.screenshot({path:path.join(output,`${locale}-selected.png`)});
     const single=await download(m.downloadSelected);assert.deepEqual(single.worksheets.map(sheet=>sheet.name),['students']);
     assert.deepEqual(requests.at(-1),{locale,includeSubmissions:'false',sheets:'students',academicYear:'2027-2028',level:'3',department:'ACCOUNTING',semester:'first'});
@@ -150,6 +193,109 @@ try {
     }
     await page.setViewportSize({width:1440,height:1050});
   }
+  for (const locale of ['en', 'ar']) {
+    const { controlDashboard: t } = JSON.parse(await fs.readFile(path.join(web, 'src/messages', `${locale}.json`), 'utf8'));
+    await page.goto(`${base}/?control=1&locale=${locale}`);
+    const section = page.locator('#control-analytics');
+    const percent = new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 1 });
+    const number = new Intl.NumberFormat(locale);
+    const chart = (title, exam) => section.locator('figure').filter({
+      has: page.getByRole('heading', { name: title.replace('{exam}', exam), exact: true }),
+    });
+    const outcomes = (exam) => chart(t.outcomesChart, exam);
+    const checkOutcome = async (exam, group, count, total) => {
+      const item = outcomes(exam).getByText(t.outcomes[group], { exact: true }).locator('..');
+      await item.getByText(number.format(count), { exact: true }).waitFor();
+      await item.getByText(percent.format(count / total), { exact: true }).waitFor();
+    };
+    await checkOutcome(t.exams.midterm, 'passed', 5, 8);
+    await checkOutcome(t.exams.midterm, 'belowThreshold', 2, 8);
+    await checkOutcome(t.exams.midterm, 'banned', 1, 8);
+    assert.deepEqual(controlRequests.at(-1), { academicYear: '2026-2027', semester: 'first' });
+    const row = section.getByRole('row').filter({ hasText: 'Gamma' });
+    const beta = section.getByRole('row').filter({ hasText: 'Beta' });
+    await beta.getByText(t.notPublished, { exact: true }).waitFor();
+    await section.getByRole('row').filter({ hasText: 'Alpha' }).getByText(t.published, { exact: true }).waitFor();
+    await row.getByText(t.notPublished, { exact: true }).waitFor();
+    assert.equal(await section.locator('figure svg.recharts-surface').count(), 3);
+    assert.deepEqual(await section.getByRole('columnheader').allTextContents(), [t.course, t.registered, t.gradeRecords, t.publicationStatus]);
+    await section.locator('figure svg').getByText('A01 · Alpha', { exact: true }).first().waitFor();
+    const search = section.getByRole('searchbox', { name: t.searchCourses, exact: true });
+    await search.fill('a03');
+    assert.equal(await section.getByRole('row').count(), 2);
+    await row.waitFor();
+    await search.clear();
+    await page.screenshot({ path: path.join(output, `control-${locale}.png`), fullPage: true });
+    await page.setViewportSize({ width: 360, height: 900 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await page.setViewportSize({ width: 1440, height: 1050 });
+    const levelFilter = section.getByRole('button', { name: t.levelFilter, exact: true });
+    await levelFilter.click();
+    await page.getByRole('option', { name: t.courseLevel.replace('{level}', '2'), exact: true }).click();
+    await section.getByRole('row').filter({ hasText: 'Alpha' }).waitFor({ state: 'hidden' });
+    await section.locator('figure svg').getByText('A01 · Alpha', { exact: true }).first().waitFor({ state: 'hidden' });
+    await section.locator('figure svg').getByText('A02 · Beta', { exact: true }).first().waitFor();
+    await checkOutcome(t.exams.midterm, 'passed', 4, 7);
+    assert.equal(await section.getByRole('row').count(), 3);
+    await search.fill('A03');
+    await row.waitFor();
+    assert.equal(await section.getByRole('row').count(), 2);
+    await search.clear();
+    await levelFilter.click();
+    await page.getByRole('option', { name: t.courseLevel.replace('{level}', '3'), exact: true }).click();
+    await section.getByText(t.noLevelCourses, { exact: true }).waitFor();
+    await levelFilter.click();
+    await page.getByRole('option', { name: t.allLevels, exact: true }).click();
+    await section.getByRole('row').filter({ hasText: 'Alpha' }).waitFor();
+    const componentFilter = (exam) => chart(t.ratesChart, exam).getByRole('button', { name: t.component, exact: true });
+    await componentFilter(t.exams.midterm).click();
+    await page.getByRole('option', { name: t.exams.final, exact: true }).click();
+    await beta.getByText(t.published, { exact: true }).waitFor();
+    await chart(t.ratesChart, t.exams.final).locator('svg').getByText('A03 · Gamma', { exact: true }).waitFor();
+    await checkOutcome(t.exams.final, 'passed', 1, 5);
+    await checkOutcome(t.exams.final, 'belowThreshold', 4, 5);
+    await checkOutcome(t.exams.final, 'banned', 0, 5);
+    await componentFilter(t.exams.final).click();
+    await page.getByRole('option', { name: t.exams.midterm, exact: true }).click();
+    for (const [label, value] of [[t.passRateFilter, t.bands.atLeast75], [t.passRateFilter, t.bands.unpublished], [t.semester, t.semesters.second]]) {
+      await section.getByRole('button', { name: label, exact: true }).click();
+      await page.getByRole('option', { name: value, exact: true }).click();
+      if (value === t.bands.atLeast75) {
+        assert.equal(await section.getByRole('row').count(), 2);
+        await section.getByText('Alpha', { exact: false }).last().waitFor();
+      } else if (value === t.bands.unpublished) {
+        await row.waitFor();
+        await checkOutcome(t.exams.midterm, 'passed', 4, 7);
+        await section.getByRole('row').filter({ hasText: 'Alpha' }).waitFor({state:'hidden'});
+      } else {
+        await section.getByText(t.noMatches, { exact: true }).waitFor();
+        await componentFilter(t.exams.midterm).click();
+        await page.getByRole('option', { name: t.exams.final, exact: true }).click();
+        await outcomes(t.exams.final).getByText(t.noResults, { exact: true }).waitFor();
+      }
+    }
+    assert.deepEqual(controlRequests.at(-1), { academicYear: '2026-2027', semester: 'second' });
+  }
+  for (const locale of ['en', 'ar']) {
+    const { adminShortcuts: t } = JSON.parse(await fs.readFile(path.join(web, 'src/messages', `${locale}.json`), 'utf8'));
+    const start = maintenanceWrites.length;
+    await page.goto(`${base}/?maintenance=1&locale=${locale}`);
+    await page.getByText(t.loginOpen, { exact: true }).waitFor();
+    const tile = page.getByRole('button').filter({ hasText: t.studentLogin });
+    const confirmation = page.getByRole('alertdialog');
+    await tile.click();
+    await confirmation.getByRole('button', { name: t.cancel, exact: true }).click();
+    await confirmation.waitFor({ state: 'hidden' });
+    assert.equal(maintenanceWrites.length, start);
+    await tile.click();
+    await confirmation.getByRole('button', { name: t.closeLogin, exact: true }).click();
+    await page.getByText(t.maintenanceActive, { exact: true }).waitFor();
+    assert.deepEqual(maintenanceWrites.at(-1), { studentLoginMaintenance: true });
+    await tile.click();
+    await confirmation.getByRole('button', { name: t.openLogin, exact: true }).click();
+    await page.getByText(t.loginOpen, { exact: true }).waitFor();
+    assert.deepEqual(maintenanceWrites.at(-1), { studentLoginMaintenance: false, studentLoginMaintenanceEta: null, studentLoginMaintenanceMessage: null });
+  }
   assert.deepEqual(errors,[]);
-  console.log('PASS: deferred dashboard analytics request timing, Arabic/English analytics exports, real XLSX downloads, full/selected sheets, level 3–4 departments, stale-filter clearing, retry, duplicate-click guard and mobile layout.');
+  console.log('PASS: deferred quiz analytics, Arabic/English Control filters and outcome charts, exam pass rates before publication, separate publication status, analytics XLSX exports, and confirmed student sign-in maintenance.');
 } finally {if(release)release();await browser?.close();await new Promise(resolve=>server.close(resolve));}

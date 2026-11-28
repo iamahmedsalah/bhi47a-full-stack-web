@@ -35,6 +35,7 @@ describe('StudentsService Unit Tests', () => {
     MockProfileConstructor.updateMany = jest.fn();
     MockProfileConstructor.updateOne = jest.fn();
     MockProfileConstructor.findByIdAndUpdate = jest.fn();
+    MockProfileConstructor.findOneAndUpdate = jest.fn();
     MockProfileConstructor.db = {
       collection: jest
         .fn()
@@ -62,6 +63,7 @@ describe('StudentsService Unit Tests', () => {
 
     mockAcademicProfileModel = {
       find: jest.fn(),
+      findOne: jest.fn(),
       create: jest.fn().mockResolvedValue({}),
       updateMany: jest.fn().mockResolvedValue({ modifiedCount: 5 }),
       updateOne: jest.fn().mockResolvedValue({}),
@@ -80,6 +82,7 @@ describe('StudentsService Unit Tests', () => {
     mockSystemSettingsModel = MockSettingsConstructor;
 
     mockUsersService = {
+      findById: jest.fn(),
       findByStudentCode: jest.fn(),
       countActiveOnlineStudents: jest.fn(),
       countActiveOnlineStaff: jest.fn().mockResolvedValue(5),
@@ -122,6 +125,38 @@ describe('StudentsService Unit Tests', () => {
     );
   });
 
+  it.each([
+    { failedCourses: [], hasAcademicResults: false },
+    { failedCourses: ['COURSE101'], hasAcademicResults: true },
+  ])(
+    'distinguishes a recorded zero GPA from missing academic results',
+    async ({ failedCourses, hasAcademicResults }) => {
+      const userId = new Types.ObjectId();
+      mockUsersService.findById.mockResolvedValue({ studentCode: '250001' });
+      mockStudentProfileModel.findOne.mockResolvedValue({
+        userId,
+        studentCode: '250001',
+        tuitionFeesStatus: 'paid',
+      });
+      mockAcademicProfileModel.findOne.mockReturnValue({
+        lean: jest.fn().mockResolvedValue({
+          gpa: 0,
+          completedCreditHours: 0,
+          completedCourses: [],
+          failedCourses,
+        }),
+      });
+
+      await expect(service.findByUserId(String(userId))).resolves.toMatchObject(
+        {
+          gpa: 0,
+          completedCreditHours: 0,
+          hasAcademicResults,
+        },
+      );
+    },
+  );
+
   describe('account status changes preserve student records', () => {
     it.each(['240512', '240517'])(
       'deactivates %s without deleting its profile or academic records',
@@ -149,7 +184,18 @@ describe('StudentsService Unit Tests', () => {
         expect(mockStudentProfileModel.db.collection).not.toHaveBeenCalled();
         expect(deleteSpy).not.toHaveBeenCalled();
 
+        mockStudentProfileModel.updateOne.mockImplementationOnce(() => {
+          profile.enrollmentStatus = 'active';
+          return Promise.resolve({ matchedCount: 1 });
+        });
         await service.activate(profile._id.toString());
+        expect(mockStudentProfileModel.updateOne).toHaveBeenCalledWith(
+          {
+            _id: profile._id.toString(),
+            officialEnrollmentStatus: { $ne: 'CANCELLED' },
+          },
+          { $set: { enrollmentStatus: 'active' } },
+        );
         expect(profile.enrollmentStatus).toBe('active');
         expect(mockUsersService.activateUser).toHaveBeenCalledWith(
           profile.userId.toString(),
@@ -163,12 +209,19 @@ describe('StudentsService Unit Tests', () => {
       async (enrollmentStatus) => {
         const profile = { userId: new Types.ObjectId(), enrollmentStatus };
         mockStudentProfileModel.findByIdAndUpdate.mockResolvedValue(profile);
+        mockStudentProfileModel.findOneAndUpdate.mockResolvedValue(profile);
         const id = new Types.ObjectId().toString();
 
         await service.update(id, { enrollmentStatus });
 
-        expect(mockStudentProfileModel.findByIdAndUpdate).toHaveBeenCalledWith(
-          id,
+        const update =
+          enrollmentStatus === 'active'
+            ? mockStudentProfileModel.findOneAndUpdate
+            : mockStudentProfileModel.findByIdAndUpdate;
+        expect(update).toHaveBeenCalledWith(
+          enrollmentStatus === 'active'
+            ? { _id: id, officialEnrollmentStatus: { $ne: 'CANCELLED' } }
+            : id,
           { $set: { enrollmentStatus } },
           { new: true, runValidators: true },
         );

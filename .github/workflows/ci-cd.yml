@@ -219,10 +219,6 @@ jobs:
           pnpm run test:control:release:browser
           pnpm run test:control:attempts:browser
 
-      - name: Stop isolated admission services
-        if: always()
-        run: docker compose -p student-portal-admissions-e2e -f docker-compose.admissions-test.yml down
-
       - name: Test responsive security and settings in Chromium
         run: pnpm --filter @student-portal/web test:security
 
@@ -236,11 +232,15 @@ jobs:
         run: pnpm run test:e2e -- --runInBand --json --outputFile="$GITHUB_WORKSPACE/apps/api/coverage/ci-api-e2e.json"
         env:
           NODE_ENV: test
-          MONGODB_URI: mongodb://localhost:27017/student-portal-e2e
+          MONGODB_URI: mongodb://127.0.0.1:27021/student-portal-e2e
           REDIS_URL: redis://localhost:6379
           JWT_SECRET: testing-secret-must-be-rotated-32-chars
           QUEUE_WORKERS_ENABLED: "false"
           RUN_STARTUP_TASKS: "false"
+
+      - name: Stop isolated admission services
+        if: always()
+        run: docker compose -p student-portal-admissions-e2e -f docker-compose.admissions-test.yml down
 
       - name: Publish test summary and failure annotations
         if: always()

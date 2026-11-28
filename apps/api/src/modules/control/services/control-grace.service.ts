@@ -142,6 +142,7 @@ export class ControlGraceService {
   ) {
     this.access.assertPermission(user, PERMISSIONS.CONTROL_GRADES_GRACE);
     const scoped = await this.sheetService.requireSheetInScope(user, id);
+    await this.access.assertCourseGradeWrite(user, scoped.sheet.courseId);
     const sheet = await this.sheets
       .findById(scoped.sheet._id)
       .session(session ?? null)

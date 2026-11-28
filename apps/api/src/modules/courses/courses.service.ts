@@ -4,20 +4,38 @@ import {
   ConflictException,
   BadRequestException,
   ForbiddenException,
+  Logger,
   Optional,
 } from '@nestjs/common';
 import {
   MaterialStorageService,
   type MaterialUpload,
 } from '../material-storage/material-storage.service';
+import {
+  MaterialPreviewService,
+  getMaterialPreviewKind,
+} from '../material-storage/material-preview.service';
 import { RagIngestionService } from '../ai/services/rag-ingestion.service';
 import { CacheService } from '../../core/cache/cache.service';
 import { measureDatabaseStage } from '../../core/metrics/request-query-context';
 import { MetricsService } from '../../core/metrics/metrics.service';
 import {
   courseStaffFilter,
+  courseStaffIds,
+  withoutGradeEntryStaff,
+  canManageCourseContent,
+  canReadCourseContent,
   isAssignedToCourse,
+  isFacultyMember,
+  isSupportingAcademicStaff,
+  isTeachingStaff,
+  type CourseContentActor,
 } from './utils/course-staff.util';
+import {
+  CourseStaffAssignment,
+  type CourseStaffAssignmentDocument,
+} from '../attendance/schemas/course-staff-assignment.schema';
+import { syncCourseEntryPermissions } from './utils/control-course-grants';
 import { courseCurriculumFilter } from './utils/course-filter.util';
 import { writeEnrollmentBatches } from './utils/enrollment-bulk.util';
 import {
@@ -29,18 +47,20 @@ import {
   MAX_COURSE_DOCTORS,
   PERMISSIONS,
   type CourseMaterialType,
+  type CourseMaterialsResponse,
   normalizeDepartment,
   type Semester,
   type CourseLevel,
   type CourseEnrollmentResult,
   type CourseEnrollmentIssue,
   type CourseEnrollmentLimitDetails,
+  type CourseMaterialPreviewResponse,
   type MaterialFileReference,
 } from '@student-portal/shared';
 import { RegistrationsService } from '../registrations/registrations.service';
 import { isCourseOfferedForTerm } from '../registrations/utils/term-availability.util';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model, Types, type ClientSession } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'crypto';
 import { Readable } from 'stream';
@@ -74,7 +94,13 @@ import {
 import {
   CreateCourseMaterialDto,
   QueryCourseMaterialsDto,
+  UpdateCourseMaterialDto,
 } from './dto/course-material.dto';
+import type {
+  CourseStaffAccessResponse,
+  UpdateCourseStaffAccessDto,
+} from './dto/course-staff-access.dto';
+import type { AuthenticatedUser } from '../auth/types/authenticated-request';
 
 export interface CourseEnrollmentOptions extends EnrollmentOptionsDto {
   actor?: { _id: string; role: string };
@@ -103,6 +129,8 @@ export interface StudentSyllabiResponse {
 
 @Injectable()
 export class CoursesService {
+  private readonly logger = new Logger(CoursesService.name);
+
   constructor(
     @InjectModel(Course.name) private courseModel: Model<CourseDocument>,
     @InjectModel(CourseMaterial.name)
@@ -119,9 +147,25 @@ export class CoursesService {
     @Optional() private metricsService?: MetricsService,
     @Optional() private materialStorage?: MaterialStorageService,
     @Optional() private ragIngestion?: RagIngestionService,
+    @Optional() private materialPreview?: MaterialPreviewService,
+    @Optional()
+    @InjectModel(CourseStaffAssignment.name)
+    private readonly attendanceAssignments?: Model<CourseStaffAssignmentDocument>,
   ) {}
 
-  async create(dto: CreateCourseDto): Promise<CourseDocument> {
+  async create(
+    dto: CreateCourseDto,
+    caller?: AuthenticatedUser,
+  ): Promise<CourseDocument> {
+    this.assertStaffAssignmentWrite(dto, caller);
+    if (
+      caller?.role === 'staff' &&
+      (dto.syllabusPdfUrl || dto.syllabusPdfName || dto.coverImageUrl)
+    ) {
+      throw new ForbiddenException(
+        'The course must be assigned before uploading its book',
+      );
+    }
     if (dto.curricula?.length) {
       dto.offeredTerms = [
         ...new Set(dto.curricula.map((item) => item.semester)),
@@ -213,6 +257,7 @@ export class CoursesService {
 
     const course = new this.courseModel({
       ...dto,
+      syllabusUploadedBy: dto.syllabusPdfUrl ? caller?._id : undefined,
       code: dto.code.toUpperCase(),
       academicLevel: dto.academicLevel ?? dto.level,
       level: dto.level ?? dto.academicLevel,
@@ -367,14 +412,29 @@ export class CoursesService {
         }
       }
 
-      if (staffIdSet.size === 0) return items;
+      const attachSyllabusAvailability = async (list: T[]): Promise<T[]> => {
+        if (typeof this.materialStorage?.exists !== 'function') return list;
+        return Promise.all(
+          list.map(async (item) => {
+            const rec = item as Record<string, any>;
+            if (!rec.syllabusFile) return item;
+            const available = await this.materialStorage!.exists(
+              rec.syllabusFile,
+            );
+            return { ...item, syllabusFileAvailable: available };
+          }),
+        );
+      };
+
+      if (staffIdSet.size === 0) return attachSyllabusAvailability(items);
 
       const objIds = Array.from(staffIdSet).map((id) => new Types.ObjectId(id));
       const users = await this.userModel
         .find({ _id: { $in: objIds } })
         .select('_id name nameAr staffType titlePrefix')
         .lean();
-      if (!Array.isArray(users) || users.length === 0) return items;
+      if (!Array.isArray(users) || users.length === 0)
+        return attachSyllabusAvailability(items);
 
       const userMap = new Map<
         string,
@@ -394,7 +454,7 @@ export class CoursesService {
         });
       }
 
-      return items.map((c) => {
+      const hydrated = items.map((c) => {
         const next: Record<string, any> = { ...c };
         if (Array.isArray(c.doctors) && c.doctors.length > 0) {
           next.doctors = c.doctors.map((d: any) => {
@@ -453,6 +513,7 @@ export class CoursesService {
 
         return next as T;
       });
+      return attachSyllabusAvailability(hydrated);
     } catch {
       return items;
     }
@@ -563,13 +624,38 @@ export class CoursesService {
     return course;
   }
 
-  async update(id: string, dto: UpdateCourseDto): Promise<CourseDocument> {
+  async update(
+    id: string,
+    dto: UpdateCourseDto,
+    caller?: AuthenticatedUser,
+  ): Promise<CourseDocument> {
+    this.assertStaffAssignmentWrite(dto, caller);
     if (dto.curricula?.length) {
       dto.offeredTerms = [
         ...new Set(dto.curricula.map((item) => item.semester)),
       ];
     }
-    const course = await this.findOne(id);
+    const changesBook = [
+      'syllabusPdfUrl',
+      'syllabusPdfName',
+      'coverImageUrl',
+    ].some(
+      (key) =>
+        Object.hasOwn(dto, key) &&
+        dto[key as keyof UpdateCourseDto] !== undefined,
+    );
+    const changesAssignments =
+      caller?.role === 'admin' &&
+      [dto.doctorId, dto.doctorIds, dto.teachingAssistantIds].some(
+        (value) => value !== undefined,
+      );
+    const course =
+      changesBook && caller
+        ? await this.findBookForWrite(id)
+        : changesAssignments
+          ? await this.findContentCourse(id)
+          : await this.findOne(id);
+    if (changesBook && caller) this.assertBookWrite(course, caller, true);
 
     if (dto.code && dto.code.toUpperCase() !== course.code) {
       const existing = await this.courseModel.findOne({
@@ -600,6 +686,16 @@ export class CoursesService {
       updatePayload.syllabusPdfData = null;
       updatePayload.syllabusFile = null;
       updatePayload.syllabusUpdatedAt = null;
+      updatePayload.syllabusUploadedBy = null;
+    } else if (
+      dto.syllabusPdfUrl &&
+      dto.syllabusPdfUrl !== course.syllabusPdfUrl
+    ) {
+      updatePayload.syllabusFile = null;
+      updatePayload.syllabusPdfData = null;
+      updatePayload.syllabusUploadedBy =
+        course.syllabusUploadedBy ?? caller?._id;
+      updatePayload.syllabusUpdatedAt = new Date();
     }
     if (dto.coverImageUrl === null || dto.coverImageUrl === '') {
       updatePayload.coverImageUrl = null;
@@ -692,21 +788,339 @@ export class CoursesService {
       }
     }
 
-    const updated = await this.courseModel.findByIdAndUpdate(
-      id,
-      {
-        $set: updatePayload,
-        ...(dto.teachingAssistantIds !== undefined
-          ? { $unset: { teachingAssistantId: 1, teachingAssistant: 1 } }
-          : {}),
-      },
-      { new: true },
-    );
+    const removedStaffIds: string[] = [];
+    const unset: Record<string, 1> =
+      dto.teachingAssistantIds !== undefined
+        ? { teachingAssistantId: 1, teachingAssistant: 1 }
+        : {};
+    if (changesAssignments) {
+      const before = course.toObject() as Record<string, unknown>;
+      const after = { ...before, ...updatePayload };
+      for (const key of Object.keys(unset)) delete after[key];
+      removedStaffIds.push(
+        ...courseStaffIds(before).filter(
+          (staffId) => !isAssignedToCourse(after, staffId),
+        ),
+      );
+      if (removedStaffIds.length && this.attendanceAssignments) {
+        const attendance = await this.attendanceAssignments
+          .find({
+            courseCode: course.code.toUpperCase(),
+            isActive: true,
+            staffId: {
+              $in: removedStaffIds.map(
+                (staffId) => new Types.ObjectId(staffId),
+              ),
+            },
+          })
+          .select('staffId')
+          .lean();
+        const stillAssigned = new Set(
+          attendance.map(({ staffId }) => String(staffId)),
+        );
+        for (let index = removedStaffIds.length - 1; index >= 0; index--) {
+          if (stillAssigned.has(removedStaffIds[index]))
+            removedStaffIds.splice(index, 1);
+        }
+      }
+      if (
+        course.contentSupervisorId &&
+        !isAssignedToCourse(after, course.contentSupervisorId, 'doctor')
+      ) {
+        unset.contentSupervisorId = 1;
+      }
+    }
+    const checkRevision = (changesBook && caller) || changesAssignments;
+    const update = {
+      $set: updatePayload,
+      $unset: unset,
+    };
+    const persist = (session?: ClientSession) =>
+      checkRevision
+        ? this.courseModel.findOneAndUpdate(
+            this.bookWriteFilter(course),
+            update,
+            { new: true, session },
+          )
+        : this.courseModel.findByIdAndUpdate(id, update, {
+            new: true,
+            session,
+          });
+    const updated = removedStaffIds.length
+      ? await this.courseModel.db.transaction(async (session) => {
+          const saved = await persist(session);
+          if (saved) {
+            await this.courseModel.updateOne(
+              { _id: saved._id },
+              [
+                {
+                  $set: {
+                    gradeEntryStaffIds: withoutGradeEntryStaff(
+                      removedStaffIds.map(
+                        (staffId) => new Types.ObjectId(staffId),
+                      ),
+                    ),
+                  },
+                },
+              ],
+              { session },
+            );
+            await this.syncEntryPermissions(removedStaffIds, session);
+          }
+          return saved;
+        })
+      : await persist();
+    if (!updated && checkRevision) {
+      throw new ConflictException('The course changed. Refresh and try again.');
+    }
     if (!updated) {
-      throw new NotFoundException('المادة غير موجودة');
+      throw new NotFoundException('Course not found');
+    }
+    if (changesBook && caller)
+      this.recordContentChange(
+        course,
+        caller,
+        course.syllabusUploadedBy,
+        'book.update',
+        id,
+      );
+    if (dto.syllabusPdfUrl === null || dto.syllabusPdfUrl === '') {
+      await this.ragIngestion?.removeCourseIndex(id).catch(() => {});
     }
     await this.cacheService?.delPattern('courses:*');
     return updated;
+  }
+
+  private assertStaffAssignmentWrite(
+    dto: Pick<
+      UpdateCourseDto,
+      'doctorId' | 'doctorIds' | 'teachingAssistantIds'
+    >,
+    caller?: AuthenticatedUser,
+  ) {
+    if (
+      caller?.role === 'staff' &&
+      [dto.doctorId, dto.doctorIds, dto.teachingAssistantIds].some(
+        (value) => value !== undefined,
+      )
+    ) {
+      throw new ForbiddenException(
+        'Only an administrator can change course staff',
+      );
+    }
+  }
+
+  private assertCourseStaffAccessCaller(caller?: AuthenticatedUser) {
+    if (!caller || caller.role === 'admin') return;
+    if (
+      caller.role === 'staff' &&
+      caller.permissions?.includes(PERMISSIONS.CONTROL_ACCESS) &&
+      caller.permissions?.includes(PERMISSIONS.CONTROL_STAFF_ENTRY_MANAGE)
+    ) {
+      return;
+    }
+    throw new ForbiddenException('Insufficient permissions');
+  }
+
+  private async instructorIds(
+    course: CourseDocument,
+    session?: ClientSession,
+  ): Promise<string[]> {
+    const termAssignments = this.attendanceAssignments
+      ? await this.attendanceAssignments
+          .find({ courseCode: course.code.toUpperCase(), isActive: true })
+          .select('staffId')
+          .session(session ?? null)
+          .lean()
+      : [];
+    return [
+      ...new Set([
+        ...courseStaffIds(course.toObject()),
+        ...termAssignments.map(({ staffId }) => String(staffId)),
+      ]),
+    ];
+  }
+
+  private syncEntryPermissions(staffIds: string[], session: ClientSession) {
+    return syncCourseEntryPermissions(
+      staffIds,
+      this.userModel,
+      this.courseModel,
+      this.attendanceAssignments,
+      session,
+    );
+  }
+
+  async getCourseStaffAccess(
+    id: string,
+    caller?: AuthenticatedUser,
+  ): Promise<CourseStaffAccessResponse> {
+    this.assertCourseStaffAccessCaller(caller);
+    const course = await this.courseModel
+      .findById(id)
+      .select('+contentSupervisorId +gradeEntryStaffIds');
+    if (!course) throw new NotFoundException('Course not found');
+    const candidates = await this.userModel
+      .find({
+        _id: { $in: await this.instructorIds(course) },
+        role: 'staff',
+        isActive: true,
+      })
+      .select('_id name nameAr staffType titlePrefix')
+      .sort({ name: 1 })
+      .lean();
+    const members = candidates.filter((candidate) =>
+      isTeachingStaff(candidate.staffType),
+    );
+    const eligible = new Set(members.map((member) => String(member._id)));
+    const supervisor = members.find(
+      (member) =>
+        String(member._id) === String(course.contentSupervisorId) &&
+        member.staffType === 'doctor' &&
+        isAssignedToCourse(course, member._id, 'doctor'),
+    );
+    return {
+      members: members.map((member) => ({
+        _id: String(member._id),
+        name: member.name,
+        nameAr: member.nameAr,
+        staffType: member.staffType,
+        titlePrefix: (member as { titlePrefix?: string }).titlePrefix,
+        canSupervise:
+          member.staffType === 'doctor' &&
+          isAssignedToCourse(course, member._id, 'doctor'),
+        isAutoAuthorizedDoctor: isFacultyMember(member.staffType),
+      })),
+      supervisorId: supervisor ? String(supervisor._id) : null,
+      canEditSupervisor: !caller || caller.role === 'admin',
+      gradeEntryStaffIds: [
+        ...new Set(
+          (course.gradeEntryStaffIds ?? [])
+            .map(String)
+            .filter((staffId) => eligible.has(staffId)),
+        ),
+      ],
+      revision:
+        (course.get('updatedAt') as Date | undefined)?.toISOString() ?? null,
+    };
+  }
+
+  async updateCourseStaffAccess(
+    id: string,
+    dto: UpdateCourseStaffAccessDto,
+    caller: AuthenticatedUser,
+  ): Promise<CourseStaffAccessResponse> {
+    this.assertCourseStaffAccessCaller(caller);
+    const changed = await this.courseModel.db.transaction(async (session) => {
+      const course = await this.courseModel
+        .findById(id)
+        .select('+contentSupervisorId +gradeEntryStaffIds')
+        .session(session);
+      if (!course) throw new NotFoundException('Course not found');
+
+      const existingSupervisorId = course.contentSupervisorId
+        ? String(course.contentSupervisorId)
+        : null;
+      if (
+        caller.role !== 'admin' &&
+        dto.supervisorId !== undefined &&
+        (dto.supervisorId ?? null) !== existingSupervisorId
+      ) {
+        throw new ForbiddenException(
+          'Only an administrator can change the content supervisor',
+        );
+      }
+      const targetSupervisorId =
+        caller.role === 'admin'
+          ? dto.supervisorId !== undefined
+            ? dto.supervisorId
+            : existingSupervisorId
+          : existingSupervisorId;
+
+      const instructorIds = new Set(await this.instructorIds(course, session));
+      const staffIds = [
+        ...new Set([
+          ...dto.gradeEntryStaffIds,
+          ...(dto.supervisorId && caller.role === 'admin'
+            ? [dto.supervisorId]
+            : []),
+        ]),
+      ];
+      const members = await this.userModel
+        .find({
+          _id: { $in: staffIds },
+          role: 'staff',
+          isActive: true,
+        })
+        .select('_id staffType')
+        .session(session)
+        .lean();
+      const eligible = new Set(
+        members
+          .filter(
+            (member) =>
+              isTeachingStaff(member.staffType) &&
+              instructorIds.has(String(member._id)),
+          )
+          .map((member) => String(member._id)),
+      );
+      if (
+        staffIds.some((staffId) => !eligible.has(staffId)) ||
+        (dto.supervisorId &&
+          caller.role === 'admin' &&
+          (!members.some(
+            (member) =>
+              String(member._id) === targetSupervisorId &&
+              member.staffType === 'doctor',
+          ) ||
+            !isAssignedToCourse(course, dto.supervisorId, 'doctor')))
+      ) {
+        throw new BadRequestException(
+          'Select active teaching staff assigned to this course',
+        );
+      }
+      const previousGradeEntryIds = (course.gradeEntryStaffIds ?? []).map(
+        String,
+      );
+      const normalizedGradeEntryIds = dto.gradeEntryStaffIds.filter((sid) => {
+        const m = members.find((item) => String(item._id) === sid);
+        return m ? isSupportingAcademicStaff(m.staffType) : false;
+      });
+      const updated = await this.courseModel.updateOne(
+        {
+          _id: course._id,
+          updatedAt: dto.revision ? new Date(dto.revision) : null,
+        },
+        {
+          $set: {
+            contentSupervisorId: targetSupervisorId,
+            gradeEntryStaffIds: normalizedGradeEntryIds.map(
+              (staffId) => new Types.ObjectId(staffId),
+            ),
+          },
+        },
+        { session },
+      );
+      if (!updated.matchedCount)
+        throw new ConflictException(
+          'The course changed. Refresh and try again.',
+        );
+      await this.syncEntryPermissions(
+        [...previousGradeEntryIds, ...normalizedGradeEntryIds],
+        session,
+      );
+      return { targetSupervisorId, normalizedGradeEntryIds };
+    });
+    this.logger.log(
+      JSON.stringify({
+        action: 'course.staff_access.update',
+        courseId: id,
+        actorId: caller._id,
+        supervisorId: changed.targetSupervisorId,
+        gradeEntryStaffIds: changed.normalizedGradeEntryIds,
+      }),
+    );
+    return this.getCourseStaffAccess(id, caller);
   }
 
   async findDoctorCourses(
@@ -763,8 +1177,16 @@ export class CoursesService {
   }
 
   async remove(id: string): Promise<{ message: string }> {
-    await this.findOne(id);
-    await this.courseModel.findByIdAndDelete(id);
+    await this.courseModel.db.transaction(async (session) => {
+      const course = await this.courseModel
+        .findByIdAndDelete(id, { session })
+        .select('+gradeEntryStaffIds');
+      if (!course) throw new NotFoundException('Course not found');
+      await this.syncEntryPermissions(
+        (course.gradeEntryStaffIds ?? []).map(String),
+        session,
+      );
+    });
     await this.cacheService?.delPattern('courses:*');
     await this.ragIngestion?.removeCourseIndex(id).catch(() => {});
     return { message: 'تم حذف المادة بنجاح' }; // Course deleted successfully
@@ -815,14 +1237,126 @@ export class CoursesService {
     }
   }
 
+  private async findContentCourse(id: string) {
+    const course = await this.courseModel
+      .findById(id)
+      .select('+contentSupervisorId');
+    if (!course) throw new NotFoundException('Course not found');
+    return course;
+  }
+
+  private async findBookForWrite(id: string) {
+    if (!Types.ObjectId.isValid(id))
+      throw new BadRequestException('Invalid course ID');
+    const course = await this.courseModel
+      .findById(id)
+      .select('+contentSupervisorId +syllabusUploadedBy +syllabusPdfData');
+    if (!course) throw new NotFoundException('Course not found');
+    return course;
+  }
+
+  private bookWriteFilter(course: CourseDocument) {
+    return { _id: course._id, updatedAt: course.get('updatedAt') ?? null };
+  }
+
+  private assertBookWrite(
+    course: CourseDocument,
+    actor: CourseContentActor,
+    allowFirstUpload: boolean,
+  ) {
+    if (actor.role === 'admin') return;
+    if (
+      allowFirstUpload &&
+      !course.syllabusPdfUrl &&
+      !course.syllabusFile &&
+      !course.syllabusPdfData &&
+      !course.syllabusUpdatedAt
+    ) {
+      this.validateCourseDoctorOrAdmin(course, actor);
+      return;
+    }
+    if (
+      !course.syllabusUploadedBy ||
+      !canManageCourseContent(
+        course,
+        actor,
+        course.syllabusUploadedBy,
+        PERMISSIONS.COURSES_WRITE,
+      )
+    ) {
+      throw new ForbiddenException('You cannot modify this course book');
+    }
+  }
+
+  private recordContentChange(
+    course: CourseDocument,
+    actor: CourseContentActor,
+    owner: Types.ObjectId | string | null | undefined,
+    action: string,
+    resourceId: string,
+  ) {
+    if (String(owner) === String(actor._id)) return;
+    this.logger.log(
+      JSON.stringify({
+        action,
+        resourceId,
+        courseId: String(course._id),
+        actorId: String(actor._id),
+        ownerId: owner ? String(owner) : null,
+      }),
+    );
+  }
+
+  async getBookCapabilities(id: string, actor: AuthenticatedUser) {
+    const course = await this.findBookForWrite(id);
+    if (!canReadCourseContent(course, actor))
+      throw new ForbiddenException('Course is outside your assigned scope');
+    const hasBook = Boolean(
+      course.syllabusFile ||
+      course.syllabusPdfUrl ||
+      course.syllabusPdfData ||
+      course.syllabusUpdatedAt,
+    );
+    const canEditBook =
+      actor.role === 'admin' ||
+      (hasBook
+        ? Boolean(
+            course.syllabusUploadedBy &&
+            canManageCourseContent(
+              course,
+              actor,
+              course.syllabusUploadedBy,
+              PERMISSIONS.COURSES_WRITE,
+            ),
+          )
+        : actor.staffType === 'doctor' &&
+          actor.permissions.includes(PERMISSIONS.COURSES_WRITE) &&
+          isAssignedToCourse(course, actor._id, 'doctor'));
+    const bookFileAvailable = course.syllabusFile
+      ? typeof this.materialStorage?.exists === 'function'
+        ? await this.materialStorage.exists(course.syllabusFile)
+        : true
+      : Boolean(course.syllabusPdfUrl || course.syllabusPdfData);
+    return {
+      canEditBook,
+      canDeleteBook: hasBook && canEditBook,
+      bookFileAvailable,
+    };
+  }
+
   async authorizeMaterialUpload(
     courseId: string,
     caller: { role: string; staffType?: string; _id: { toString(): string } },
     book: boolean,
   ) {
     if (!caller) throw new ForbiddenException('Authentication required');
+    if (book)
+      return this.assertBookWrite(
+        await this.findBookForWrite(courseId),
+        caller,
+        true,
+      );
     const course = await this.findOne(courseId);
-    if (book) return this.validateCourseDoctorOrAdmin(course, caller);
     if (!this.materialUploadPolicy(course, caller)) {
       throw new ForbiddenException(
         'You are not assigned to upload materials for this course',
@@ -849,7 +1383,7 @@ export class CoursesService {
       type === 'assistant_lecturer' &&
       isAssignedToCourse(course, id, 'all')
     ) {
-      return { role: type, types: ['lecture', 'section'] };
+      return { role: type, types: ['section'] };
     }
     if (
       type === 'teaching_assistant' &&
@@ -860,10 +1394,17 @@ export class CoursesService {
     return null;
   }
 
-  async uploadSyllabus(courseId: string, file: MaterialUpload, caller?: any) {
-    const course = await this.findOne(courseId);
-    this.validateCourseDoctorOrAdmin(course, caller);
+  async uploadSyllabus(
+    courseId: string,
+    file: MaterialUpload,
+    caller: CourseContentActor,
+  ) {
+    const course = await this.findBookForWrite(courseId);
+    this.assertBookWrite(course, caller, true);
+    course.$where = this.bookWriteFilter(course);
     const stored = await this.materialStorage!.save(file, true);
+    const owner = course.syllabusUploadedBy;
+    course.syllabusUploadedBy ??= new Types.ObjectId(String(caller._id));
     course.syllabusFile = stored;
     course.syllabusPdfUrl = `/api/courses/${courseId}/syllabus/download`;
     course.syllabusPdfName = stored.originalName;
@@ -873,8 +1414,15 @@ export class CoursesService {
       await course.save();
     } catch (error) {
       await this.cleanupFailedMaterialCommit(stored, course._id, true, error);
+      if ((error as { name?: string }).name === 'DocumentNotFoundError') {
+        throw new ConflictException(
+          'The course book changed. Refresh and try again.',
+        );
+      }
       throw error;
     }
+    if (owner)
+      this.recordContentChange(course, caller, owner, 'book.replace', courseId);
     await this.cacheService?.delPattern('courses:*');
     if (stored.sha256) {
       void this.ragIngestion
@@ -915,6 +1463,9 @@ export class CoursesService {
         !course.syllabusFile)
     ) {
       throw new NotFoundException('لم يتم رفع ملف المنهج لهذا المقرر بعد');
+    }
+    if (caller?.role === 'staff' && !canReadCourseContent(course, caller)) {
+      throw new ForbiddenException('Course is outside your assigned scope');
     }
 
     if (course.syllabusFile)
@@ -1006,8 +1557,9 @@ export class CoursesService {
     courseCode: string;
     coverImageUrl: string;
   }> {
-    const course = await this.findOne(courseId);
-    this.validateCourseDoctorOrAdmin(course, caller);
+    const course = await this.findBookForWrite(courseId);
+    this.assertBookWrite(course, caller, true);
+    course.$where = this.bookWriteFilter(course);
 
     const isImage =
       file.mimetype.startsWith('image/') ||
@@ -1072,7 +1624,14 @@ export class CoursesService {
     }
 
     course.coverImageUrl = fileUrl;
-    await course.save();
+    await this.saveBookChange(course);
+    this.recordContentChange(
+      course,
+      caller,
+      course.syllabusUploadedBy,
+      'book.cover.update',
+      courseId,
+    );
 
     return {
       message: 'تم رفع وتحديث صورة غلاف المقرر بنجاح',
@@ -1174,14 +1733,18 @@ export class CoursesService {
     courseId: string,
     caller?: any,
   ): Promise<{ message: string }> {
-    const course = await this.findOne(courseId);
-    this.validateCourseDoctorOrAdmin(course, caller);
+    const course = await this.findBookForWrite(courseId);
+    this.assertBookWrite(course, caller, false);
+    course.$where = this.bookWriteFilter(course);
+    const owner = course.syllabusUploadedBy;
     course.syllabusFile = undefined;
     course.syllabusPdfUrl = undefined;
     course.syllabusPdfName = undefined;
     course.syllabusPdfData = undefined;
     course.syllabusUpdatedAt = undefined;
-    await course.save();
+    course.syllabusUploadedBy = undefined;
+    await this.saveBookChange(course);
+    this.recordContentChange(course, caller, owner, 'book.delete', courseId);
     await this.cacheService?.delPattern('courses:*');
     await this.ragIngestion?.removeCourseIndex(courseId).catch(() => {});
     return { message: 'تم إزالة ملف المنهج بنجاح' };
@@ -1191,11 +1754,32 @@ export class CoursesService {
     courseId: string,
     caller?: any,
   ): Promise<{ message: string }> {
-    const course = await this.findOne(courseId);
-    this.validateCourseDoctorOrAdmin(course, caller);
+    const course = await this.findBookForWrite(courseId);
+    this.assertBookWrite(course, caller, true);
+    course.$where = this.bookWriteFilter(course);
     course.coverImageUrl = undefined;
-    await course.save();
+    await this.saveBookChange(course);
+    this.recordContentChange(
+      course,
+      caller,
+      course.syllabusUploadedBy,
+      'book.cover.delete',
+      courseId,
+    );
     return { message: 'تم إزالة صورة غلاف المقرر بنجاح' };
+  }
+
+  private async saveBookChange(course: CourseDocument) {
+    try {
+      await course.save();
+    } catch (error) {
+      if ((error as { name?: string }).name === 'DocumentNotFoundError') {
+        throw new ConflictException(
+          'The course book changed. Refresh and try again.',
+        );
+      }
+      throw error;
+    }
   }
 
   /**
@@ -1271,6 +1855,7 @@ export class CoursesService {
       isPublished: true,
       uploadedBy: new Types.ObjectId(caller._id),
       uploadedByName: caller.name || caller.fullName || 'عضو هيئة تدريس',
+      ...(caller.nameAr ? { uploadedByNameAr: caller.nameAr } : {}),
       uploadedByRole,
     });
 
@@ -1306,8 +1891,14 @@ export class CoursesService {
     courseId: string,
     query: QueryCourseMaterialsDto,
     caller?: any,
-  ) {
-    const course = await this.findOne(courseId);
+  ): Promise<CourseMaterialsResponse> {
+    const course =
+      caller?.role === 'staff'
+        ? await this.findContentCourse(courseId)
+        : await this.findOne(courseId);
+    if (caller?.role === 'staff' && !canReadCourseContent(course, caller)) {
+      throw new ForbiddenException('Course is outside your assigned scope');
+    }
 
     // If caller is student: enforce withholding gate for unpaid fees
     if (caller && caller.role === 'student') {
@@ -1335,8 +1926,100 @@ export class CoursesService {
       .sort({ weekNumber: 1, createdAt: 1 })
       .lean();
 
+    const uploaderIds = [
+      ...new Set(
+        materials
+          .map((m) => (m.uploadedBy ? String(m.uploadedBy) : ''))
+          .filter((id) => Types.ObjectId.isValid(id)),
+      ),
+    ];
+    const uploaderMap = new Map<
+      string,
+      { name?: string; nameAr?: string; titlePrefix?: string }
+    >();
+    if (uploaderIds.length > 0 && typeof this.userModel?.find === 'function') {
+      const uploaders = await this.userModel
+        .find({
+          _id: { $in: uploaderIds.map((id) => new Types.ObjectId(id)) },
+        })
+        .select('_id name nameAr titlePrefix')
+        .lean();
+      if (Array.isArray(uploaders)) {
+        for (const u of uploaders) {
+          uploaderMap.set(String(u._id), {
+            name: u.name,
+            nameAr: (u as { nameAr?: string }).nameAr,
+            titlePrefix: (u as { titlePrefix?: string }).titlePrefix,
+          });
+        }
+      }
+    }
+
+    const hydratedMaterials = await Promise.all(
+      materials.map(async ({ storedFile, ...material }) => {
+        const hasFile = Boolean(
+          storedFile ||
+          material.mimeType ||
+          material.fileSize ||
+          !material.videoUrl,
+        );
+        let fileAvailable = hasFile;
+        if (hasFile) {
+          if (storedFile) {
+            fileAvailable =
+              typeof this.materialStorage?.exists === 'function'
+                ? await this.materialStorage.exists(storedFile)
+                : true;
+          } else {
+            fileAvailable = Boolean(
+              material.fileUrl?.startsWith('data:') ||
+              material.fileUrl?.startsWith('https://'),
+            );
+          }
+        }
+        const uploaderId = material.uploadedBy?.toString() ?? '';
+        const uploader = uploaderMap.get(uploaderId);
+        return {
+          ...material,
+          _id: String(material._id),
+          courseId: String(material.courseId),
+          uploadedBy: uploaderId,
+          uploadedByName: uploader?.name || material.uploadedByName,
+          uploadedByNameAr:
+            uploader?.nameAr ||
+            (material as { uploadedByNameAr?: string }).uploadedByNameAr,
+          ...(uploader?.titlePrefix
+            ? { uploadedByTitlePrefix: uploader.titlePrefix }
+            : {}),
+          fileUrl: `/api/courses/materials/${String(material._id)}/download`,
+          hasFile,
+          fileAvailable,
+          createdAt: material.createdAt?.toISOString() ?? '',
+          updatedAt: material.updatedAt?.toISOString() ?? '',
+          canEdit: Boolean(
+            caller &&
+            canManageCourseContent(
+              course,
+              caller,
+              material.uploadedBy,
+              PERMISSIONS.COURSE_MATERIALS_WRITE,
+            ),
+          ),
+          canDelete: Boolean(
+            caller &&
+            canManageCourseContent(
+              course,
+              caller,
+              material.uploadedBy,
+              PERMISSIONS.COURSE_MATERIALS_DELETE,
+            ),
+          ),
+        };
+      }),
+    );
+
     return {
-      courseId: course._id,
+      courseId: String(course._id),
       courseCode: course.code,
       courseName: course.name,
       courseNameAr: course.nameAr,
@@ -1348,17 +2031,30 @@ export class CoursesService {
           caller.permissions.includes(PERMISSIONS.COURSE_MATERIALS_WRITE))
           ? (this.materialUploadPolicy(course, caller)?.types ?? [])
           : [],
-      materials,
+      materials: hydratedMaterials,
     };
   }
 
-  /**
-   * Stream / download course material with student withholding check.
-   */
-  async downloadCourseMaterial(materialId: string, res: any, caller?: any) {
+  private getPreviewEngine(): MaterialPreviewService {
+    if (!this.materialPreview) {
+      this.materialPreview = new MaterialPreviewService();
+    }
+    return this.materialPreview;
+  }
+
+  private async authorizeAndLoadMaterial(materialId: string, caller?: any) {
     const material = await this.courseMaterialModel.findById(materialId);
     if (!material) {
       throw new NotFoundException('لم يتم العثور على الملف المطلوب');
+    }
+    if (
+      caller?.role === 'staff' &&
+      !canReadCourseContent(
+        await this.findContentCourse(String(material.courseId)),
+        caller,
+      )
+    ) {
+      throw new ForbiddenException('Course is outside your assigned scope');
     }
 
     if (caller && caller.role === 'student') {
@@ -1373,8 +2069,152 @@ export class CoursesService {
       }
     }
 
-    if (caller?.role === 'student' && !material.isPublished)
+    if (caller?.role === 'student' && !material.isPublished) {
       throw new NotFoundException('Material is unavailable');
+    }
+
+    return material;
+  }
+
+  private async resolveMaterialBuffer(
+    material: CourseMaterialDocument,
+  ): Promise<Buffer> {
+    if (material.storedFile) {
+      if (!this.materialStorage) {
+        throw new NotFoundException('Material storage is unavailable');
+      }
+      return this.materialStorage.readBuffer(material.storedFile);
+    }
+
+    if (material.fileUrl?.startsWith('data:')) {
+      const parts = material.fileUrl.split(';base64,');
+      return Buffer.from(parts[1] ?? '', 'base64');
+    }
+
+    if (material.fileUrl?.startsWith('https://')) {
+      this.assertLegacyOrigin(material.fileUrl);
+      const upstream = await fetch(material.fileUrl, {
+        redirect: 'error',
+        signal: AbortSignal.timeout(60000),
+      });
+      if (!upstream.ok) {
+        throw new NotFoundException('Legacy material is unavailable');
+      }
+      const arr = await upstream.arrayBuffer();
+      return Buffer.from(arr);
+    }
+
+    throw new NotFoundException('Material file is unavailable');
+  }
+
+  /**
+   * Generate structured in-app preview metadata/content for a course material.
+   */
+  async previewCourseMaterial(
+    materialId: string,
+    caller?: any,
+    entryName?: string,
+  ): Promise<CourseMaterialPreviewResponse> {
+    const material = await this.authorizeAndLoadMaterial(materialId, caller);
+    const hasFile = Boolean(
+      material.storedFile ||
+      material.mimeType ||
+      material.fileSize ||
+      !material.videoUrl,
+    );
+
+    const fileName =
+      material.storedFile?.originalName ||
+      material.fileName ||
+      material.title ||
+      'material';
+    const mimeType = material.storedFile?.mimeType || material.mimeType;
+    const fileSize = material.storedFile?.size ?? material.fileSize;
+
+    if (!hasFile) {
+      return this.getPreviewEngine().buildPreview({
+        materialId: String(material._id ?? materialId),
+        title: material.title,
+        fileName,
+        mimeType,
+        fileSize,
+        videoUrl: material.videoUrl,
+      });
+    }
+
+    const directKind = getMaterialPreviewKind(fileName, mimeType);
+    if (
+      !entryName &&
+      (directKind === 'pdf' ||
+        directKind === 'image' ||
+        directKind === 'unsupported')
+    ) {
+      if (
+        material.storedFile &&
+        typeof this.materialStorage?.exists === 'function'
+      ) {
+        const available = await this.materialStorage.exists(
+          material.storedFile,
+        );
+        if (!available) {
+          throw new NotFoundException(
+            'Material file is missing. Contact the administrator.',
+          );
+        }
+      } else if (
+        !material.storedFile &&
+        !material.fileUrl?.startsWith('data:') &&
+        !material.fileUrl?.startsWith('https://')
+      ) {
+        throw new NotFoundException('Material file is unavailable');
+      }
+
+      const ext = fileName.includes('.')
+        ? (fileName.split('.').pop()?.toLowerCase() ?? '')
+        : '';
+      return {
+        materialId: String(material._id ?? materialId),
+        title: material.title,
+        fileName,
+        mimeType: mimeType || 'application/octet-stream',
+        fileSize,
+        kind: directKind,
+        ...(material.videoUrl ? { videoUrl: material.videoUrl } : {}),
+        ...(directKind === 'unsupported'
+          ? {
+              unsupportedReason: ['doc', 'ppt', 'xls'].includes(ext)
+                ? 'legacy_office'
+                : ext === 'rar'
+                  ? 'rar_archive'
+                  : 'unsupported_format',
+            }
+          : {}),
+      };
+    }
+
+    const buffer = await this.resolveMaterialBuffer(material);
+    return this.getPreviewEngine().buildPreview({
+      materialId: String(material._id ?? materialId),
+      title: material.title,
+      fileName,
+      mimeType,
+      fileSize,
+      videoUrl: material.videoUrl,
+      buffer,
+      entryName,
+    });
+  }
+
+  /**
+   * Stream / download course material with student withholding check.
+   */
+  async downloadCourseMaterial(
+    materialId: string,
+    res: any,
+    caller?: any,
+    options?: { inline?: boolean; entry?: string },
+  ) {
+    const material = await this.authorizeAndLoadMaterial(materialId, caller);
     if (
       material.videoUrl &&
       !material.storedFile &&
@@ -1385,8 +2225,33 @@ export class CoursesService {
         'Open the recording link instead of downloading a file',
       );
     }
-    if (material.storedFile)
+
+    const inline = options?.inline === true;
+    if (options?.entry) {
+      const zipBuffer = await this.resolveMaterialBuffer(material);
+      const extracted = await this.getPreviewEngine().extractSingleZipEntry(
+        zipBuffer,
+        options.entry,
+      );
+      const encodedName = encodeURIComponent(
+        extracted.name.split('/').pop() || 'material',
+      ).replace(/'/g, '%27');
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Content-Type', extracted.mimeType);
+      res.setHeader(
+        'Content-Disposition',
+        `${inline ? 'inline' : 'attachment'}; filename="material.${extracted.extension || 'bin'}"; filename*=UTF-8''${encodedName}`,
+      );
+      return res.send(extracted.buffer);
+    }
+
+    if (material.storedFile) {
+      if (inline) {
+        return this.materialStorage!.deliver(material.storedFile, res, true);
+      }
       return this.materialStorage!.deliver(material.storedFile, res);
+    }
 
     res.setHeader('Cache-Control', 'private, no-store');
     if (material.fileUrl.startsWith('data:')) {
@@ -1396,7 +2261,7 @@ export class CoursesService {
       res.setHeader('Content-Type', contentType);
       res.setHeader(
         'Content-Disposition',
-        `attachment; filename="${encodeURIComponent(material.fileName)}"`,
+        `${inline ? 'inline' : 'attachment'}; filename="${encodeURIComponent(material.fileName)}"`,
       );
       return res.send(buffer);
     }
@@ -1406,6 +2271,7 @@ export class CoursesService {
       res,
       material.fileName,
       material.mimeType,
+      inline,
     );
   }
 
@@ -1470,6 +2336,7 @@ export class CoursesService {
     res: any,
     filename: string,
     mimeType?: string,
+    inline = false,
   ) {
     this.assertLegacyOrigin(url);
     const upstream = await fetch(url, {
@@ -1483,27 +2350,142 @@ export class CoursesService {
     res.setHeader('Content-Type', mimeType || 'application/octet-stream');
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="material"; filename*=UTF-8''${encodeURIComponent(filename).replace(/'/g, '%27')}`,
+      `${inline ? 'inline' : 'attachment'}; filename="material"; filename*=UTF-8''${encodeURIComponent(filename).replace(/'/g, '%27')}`,
     );
     return Readable.fromWeb(upstream.body as any).pipe(res);
   }
 
-  async deleteCourseMaterial(materialId: string, caller: any) {
+  private async requireMaterialMutation(
+    materialId: string,
+    actor: CourseContentActor,
+    permission: string,
+  ) {
+    if (!Types.ObjectId.isValid(materialId))
+      throw new BadRequestException('Invalid material ID');
     const material = await this.courseMaterialModel.findById(materialId);
     if (!material) {
-      throw new NotFoundException('لم يتم العثور على الملف المطلوب');
+      throw new NotFoundException('Material not found');
     }
+    const course = await this.findContentCourse(String(material.courseId));
+    if (
+      !canManageCourseContent(course, actor, material.uploadedBy, permission)
+    ) {
+      throw new ForbiddenException('You cannot modify this course material');
+    }
+    return { material, course };
+  }
 
-    if (caller.role !== 'admin') {
-      const callerIdStr = caller._id?.toString();
-      if (material.uploadedBy.toString() !== callerIdStr) {
-        throw new ForbiddenException(
-          'لا يمكنك حذف ملف قام برفعه عضو تدريس آخر',
+  async authorizeMaterialEdit(materialId: string, actor: CourseContentActor) {
+    await this.requireMaterialMutation(
+      materialId,
+      actor,
+      PERMISSIONS.COURSE_MATERIALS_WRITE,
+    );
+  }
+
+  async updateCourseMaterial(
+    id: string,
+    files: MaterialUpload[],
+    dto: UpdateCourseMaterialDto,
+    caller: CourseContentActor,
+  ) {
+    const { material, course } = await this.requireMaterialMutation(
+      id,
+      caller,
+      PERMISSIONS.COURSE_MATERIALS_WRITE,
+    );
+    const video =
+      dto.videoUrl === undefined
+        ? material.videoUrl
+        : dto.videoUrl.trim() || undefined;
+    const hasFile = Boolean(
+      material.storedFile ||
+      material.mimeType ||
+      material.fileSize ||
+      !material.videoUrl,
+    );
+    if (!files.length && !video && !hasFile) {
+      throw new BadRequestException('Provide a file or a recording URL');
+    }
+    const title = dto.title === undefined ? material.title : dto.title.trim();
+    if (!title) throw new BadRequestException('Provide a title');
+    const bundle =
+      files.length > 1
+        ? await this.materialStorage!.saveBundle(files, title)
+        : undefined;
+    const stored =
+      bundle?.stored ??
+      (files[0]
+        ? await this.materialStorage!.save(files[0], false)
+        : undefined);
+    material.$where = { updatedAt: material.get('updatedAt') ?? null };
+    material.title = title;
+    if (dto.titleAr !== undefined)
+      material.titleAr = dto.titleAr?.trim() || undefined;
+    if (dto.description !== undefined)
+      material.description = dto.description?.trim() || undefined;
+    if (dto.weekNumber !== undefined)
+      material.weekNumber = dto.weekNumber ?? undefined;
+    material.videoUrl = video;
+    if (stored) {
+      material.storedFile = stored;
+      material.attachments = bundle?.attachments;
+      material.fileUrl = `/api/courses/materials/${id}/download`;
+      material.fileName = stored.originalName;
+      material.fileSize = stored.size;
+      material.mimeType = stored.mimeType;
+    }
+    try {
+      await material.save();
+    } catch (error) {
+      if (stored)
+        await this.cleanupFailedMaterialCommit(
+          stored,
+          material._id,
+          false,
+          error,
+        );
+      if ((error as { name?: string }).name === 'DocumentNotFoundError') {
+        throw new ConflictException(
+          'The material changed. Refresh and try again.',
         );
       }
+      throw error;
     }
+    this.recordContentChange(
+      course,
+      caller,
+      material.uploadedBy,
+      'material.update',
+      id,
+    );
+    await this.cacheService?.delPattern(
+      `courses:${material.courseId.toString()}:materials*`,
+    );
+    return { material };
+  }
 
-    await this.courseMaterialModel.findByIdAndDelete(materialId);
+  async deleteCourseMaterial(materialId: string, caller: CourseContentActor) {
+    const { material, course } = await this.requireMaterialMutation(
+      materialId,
+      caller,
+      PERMISSIONS.COURSE_MATERIALS_DELETE,
+    );
+    const deleted = await this.courseMaterialModel.findOneAndDelete({
+      _id: material._id,
+      updatedAt: material.get('updatedAt') ?? null,
+    });
+    if (!deleted)
+      throw new ConflictException(
+        'The material changed. Refresh and try again.',
+      );
+    this.recordContentChange(
+      course,
+      caller,
+      material.uploadedBy,
+      'material.delete',
+      materialId,
+    );
     void this.cacheService?.delPattern(
       `courses:${material.courseId.toString()}:materials*`,
     );

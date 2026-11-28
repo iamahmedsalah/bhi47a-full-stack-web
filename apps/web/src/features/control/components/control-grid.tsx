@@ -1552,6 +1552,7 @@ export function ControlGrid({
                         <span className="truncate max-w-[240px]">
                           {displayName}
                         </span>
+                        {row.provisional && <StatusBadge label={isAr ? 'قيد مبدئي' : 'Provisional enrollment'} variant="warning" />}
                         {row.notRegistered && (
                           <StatusBadge
                             label={isAr ? 'خارج التسجيل' : 'Unregistered'}

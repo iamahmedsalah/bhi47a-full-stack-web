@@ -172,6 +172,7 @@ Before edits or a Codex prompt, produce a short implementation plan with:
 - Use `references/review-checklist.md` for review tasks.
 - Use `references/student-portal-patterns.md` for implementation patterns.
 - Use `references/table-and-ui-standards.md` for table and interface composition.
+- Use the shared `HelpNote` from `@/components/ui/help-note` for optional guidance, workflow notes, and usage tips. Keep it closed by default, and keep validation, warnings, and required instructions visible with their existing components.
 - Use `references/bilingual-rtl-architecture.md` for RTL, translation, and modal standards.
 - Use `references/slug-url-architecture.md` for slug routing and identity separation.
 - Use `references/validation-architecture.md` for domain validation and error handling.

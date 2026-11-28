@@ -30,7 +30,8 @@ export const rateLimitRules: RateLimitRule[] = [
   {
     name: 'public-admissions-ip',
     methods: ['POST'],
-    pattern: /^\/api\/public\/admissions\/(validate|requests|status)$/,
+    pattern:
+      /^\/api\/public\/admissions\/(validate|requests|status|correction)$/,
     windowMs: minute,
     max: readLimit('ADMISSIONS_IP_RATE_LIMIT', 120),
     message: 'Too many admission requests. Please wait and retry.',
@@ -47,7 +48,7 @@ export const rateLimitRules: RateLimitRule[] = [
   {
     name: 'public-admissions-status',
     methods: ['POST'],
-    pattern: /^\/api\/public\/admissions\/status$/,
+    pattern: /^\/api\/public\/admissions\/(status|correction)$/,
     windowMs: minute,
     max: 20,
     message: 'Too many status checks. Please wait and retry.',

@@ -187,6 +187,7 @@ export class ControlGradesService {
       sheet.academicYear,
       sheet.semester,
     );
+    await this.access.assertCourseGradeWrite(user, sheet.courseId);
     if (isPartialOpen) {
       if (
         sheet.locked ||

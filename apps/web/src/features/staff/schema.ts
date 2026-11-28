@@ -73,6 +73,10 @@ export const createStaffFormSchema = (
         .array(z.string().regex(/^[a-f0-9]{24}$/i))
         .max(100)
         .optional(),
+      gradeEntryCourseIds: z
+        .array(z.string().regex(/^[a-f0-9]{24}$/i))
+        .max(100)
+        .optional(),
       permissions: z
         .array(
           z.custom<Permission>(

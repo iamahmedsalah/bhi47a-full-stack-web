@@ -100,6 +100,7 @@ export function analyzeCodeSnapshot(
       Object.assign(row, {
         observedStudentId: String(owners[0]._id),
         studentProfileId: String(profiles[0]._id),
+        permanent: Boolean(entry?.protectedAt),
         studentName: profiles[0].fullNameEn || profiles[0].fullName,
         studentNameAr: profiles[0].fullNameAr || profiles[0].fullName,
         department: profiles[0].department,
@@ -222,6 +223,7 @@ export function analyzeCodeSnapshot(
         entry.sequence,
         entry.status,
         entry.reuseAuthorized,
+        entry.protectedAt,
         String(entry.currentStudentId ?? ''),
         String(entry.registrationRequestId ?? ''),
         entry.assignmentHistory,

@@ -1,4 +1,6 @@
 import { ControlAttemptStore } from '../control/control-attempt.store';
+import { canViewAdmissionResult } from '../admissions/enrollment-policy';
+import type { StudentProfile } from '../students/schemas/student-profile.schema';
 import { ConflictException } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { Types } from 'mongoose';
@@ -109,6 +111,59 @@ export class ControlReleaseStore {
   }
   private get policies() {
     return this.db.collection<Policy>('control_result_policies');
+  }
+
+  async officialCourseCounts(
+    academicYear: string,
+    semester: string,
+    courseIds: Types.ObjectId[],
+  ) {
+    if (!courseIds.length) return [];
+    return this.pointers
+      .aggregate<{
+        _id: Types.ObjectId;
+        results: number;
+        passed: number;
+      }>([
+        {
+          $match: {
+            active: true,
+            'scope.courseId': { $in: courseIds },
+            'scope.academicYear': academicYear,
+            'scope.semester': semester,
+            'scope.component': 'final',
+          },
+        },
+        {
+          $lookup: {
+            from: this.releases.collectionName,
+            localField: 'releaseId',
+            foreignField: '_id',
+            pipeline: [
+              { $project: { marks: 0 } },
+              { $unwind: '$results' },
+              { $match: { 'results.result.official': true } },
+              {
+                $group: {
+                  _id: null,
+                  results: { $sum: 1 },
+                  passed: { $sum: { $cond: ['$results.result.passed', 1, 0] } },
+                },
+              },
+            ],
+            as: 'official',
+          },
+        },
+        { $unwind: '$official' },
+        {
+          $group: {
+            _id: '$scope.courseId',
+            results: { $sum: '$official.results' },
+            passed: { $sum: '$official.passed' },
+          },
+        },
+      ])
+      .toArray();
   }
   private policyKey(scope: Omit<ReleaseScope, 'component'>) {
     return `${String(scope.courseId)}|${scope.academicYear}|${scope.semester}`;
@@ -315,8 +370,22 @@ export class ControlReleaseStore {
         ]),
       ]),
     );
-    const deferredStudents: string[] = [];
+    const excluded =
+      sheet.component === 'final'
+        ? await this.db
+            .collection<StudentProfile>('student_profiles')
+            .find(
+              {
+                userId: { $in: registrations.map((row) => row.studentId) },
+                officialEnrollmentStatus: { $in: ['PROVISIONAL', 'CANCELLED'] },
+              },
+              { session, projection: { userId: 1 } },
+            )
+            .toArray()
+        : [];
+    const deferredStudents = excluded.map((profile) => String(profile.userId));
     for (const id of roster) {
+      if (deferredStudents.includes(id)) continue;
       const missing = needed.filter(
         (key) => !presentComponents.get(id)?.has(key),
       );
@@ -713,6 +782,31 @@ export class ControlReleaseStore {
       .toArray();
     for (const job of pending) {
       try {
+        const profile = await this.db
+          .collection<StudentProfile>('student_profiles')
+          .findOne({ userId: job.studentId });
+        if (
+          profile?.officialEnrollmentStatus === 'PROVISIONAL' ||
+          profile?.officialEnrollmentStatus === 'CANCELLED'
+        ) {
+          const release = await this.releases.findOne({ _id: job.releaseId });
+          if (
+            !release ||
+            !(await canViewAdmissionResult(
+              this.connection,
+              profile,
+              release.scope.component,
+              release.scope.academicYear,
+              release.scope.semester,
+            ))
+          ) {
+            await outbox.updateOne(
+              { _id: job._id },
+              { $set: { delivered: true }, $inc: { attempts: 1 } },
+            );
+            continue;
+          }
+        }
         // Deterministic _id gives crash-safe retries across multiple API workers.
         await this.db.collection('notifications').updateOne(
           { _id: job._id },

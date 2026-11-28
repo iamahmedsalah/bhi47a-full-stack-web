@@ -15,6 +15,9 @@ import {
   X,
   Video,
   ExternalLink,
+  Pencil,
+  Eye,
+  AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import api, { getApiErrorMessage } from '@/lib/api';
@@ -25,7 +28,7 @@ import {
   COURSE_MATERIAL_MAX_BYTES,
   COURSE_MATERIAL_MAX_FILES,
   COURSE_MATERIAL_EXTENSIONS,
-  PERMISSIONS,
+  formatStaffDisplayName,
   type CourseMaterialsResponse,
   type CourseMaterialType,
   type CourseMaterialDto,
@@ -43,6 +46,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { FileTypeIcon, getFileTypeMeta } from '@/components/ui/file-type-icon';
 import { useMaterialUploadActions } from '@/features/courses/material-upload-provider';
 import { MaterialUploadNotifications } from '@/features/courses/material-upload-status';
+import { CourseMaterialPreviewDialog } from './course-material-preview-dialog';
 
 interface CourseMaterialsDialogProps {
   open: boolean;
@@ -70,14 +74,15 @@ export function CourseMaterialsDialog({
   const { user } = useAuth();
   const { start: startUpload } = useMaterialUploadActions();
 
-  const isAdmin = user?.role === 'admin';
   // Filter state
   const [activeTab, setActiveTab] = useState<'all' | 'lecture' | 'section'>('all');
 
   // Upload Form state
   const [isUploadFormOpen, setIsUploadFormOpen] = useState(false);
+  const [editing, setEditing] = useState<CourseMaterialDto | null>(null);
   const [uploadType, setUploadType] = useState<CourseMaterialType>(COURSE_MATERIAL_TYPES.LECTURE);
   const [title, setTitle] = useState('');
+  const [titleAr, setTitleAr] = useState('');
   const [weekNumber, setWeekNumber] = useState<string>('');
   const [description, setDescription] = useState('');
   const [files, setFiles] = useState<File[]>([]);
@@ -100,6 +105,11 @@ export function CourseMaterialsDialog({
   })();
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+  const titleInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  React.useEffect(() => {
+    if (editing) titleInputRef.current?.focus();
+  }, [editing]);
 
   const handleFileSelect = (selected: File[]) => {
     const next = [...files];
@@ -131,8 +141,9 @@ export function CourseMaterialsDialog({
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // Delete state
+  // Delete & Preview state
   const [materialToDelete, setMaterialToDelete] = useState<CourseMaterialDto | null>(null);
+  const [previewMaterialId, setPreviewMaterialId] = useState<string | null>(null);
 
   // Fetch materials
   const { data, isLoading, isError, error, refetch } = useQuery<CourseMaterialsResponse>({
@@ -154,27 +165,66 @@ export function CourseMaterialsDialog({
 
   const allowedTypes = isStudent ? [] : (data?.allowedUploadTypes ?? []);
   const canUploadAny = allowedTypes.length > 0;
-  const effectiveUploadType = allowedTypes.includes(uploadType)
+  const effectiveUploadType = editing?.type ?? (allowedTypes.includes(uploadType)
     ? uploadType
-    : (allowedTypes[0] ?? COURSE_MATERIAL_TYPES.LECTURE);
+    : (allowedTypes[0] ?? COURSE_MATERIAL_TYPES.LECTURE));
   const materials = data?.materials || [];
+  const materialToPreview = materials.find((item) => item._id === previewMaterialId) ?? null;
   const filteredMaterials =
     activeTab === 'all' ? materials : materials.filter((m) => m.type === activeTab);
 
   // Create material mutation
   const resetForm = () => {
     setTitle('');
+    setTitleAr('');
     setWeekNumber('');
     setDescription('');
     setFiles([]);
     setFileErrors([]);
     setVideoUrl('');
+    setEditing(null);
     setIsUploadFormOpen(false);
   };
+  const openEdit = (item: CourseMaterialDto) => {
+    resetForm();
+    setEditing(item);
+    setTitle(item.title);
+    setTitleAr(item.titleAr ?? '');
+    setDescription(item.description ?? '');
+    setWeekNumber(item.weekNumber?.toString() ?? '');
+    setVideoUrl(item.videoUrl ?? '');
+    setIsUploadFormOpen(true);
+  };
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      resetForm();
+      setPreviewMaterialId(null);
+    }
+    onOpenChange(nextOpen);
+  };
+  const editMutation = useMutation({
+    mutationFn: ({ id, payload }: {
+      id: string;
+      payload: {
+        title: string;
+        titleAr?: string;
+        weekNumber: number | null;
+        description: string;
+        videoUrl: string;
+      };
+    }) => api.patch(`/courses/materials/${id}`, payload),
+    onSuccess: () => {
+      toast.success(isAr ? 'تم حفظ التعديلات' : 'Changes saved');
+      resetForm();
+      void queryClient.invalidateQueries({ queryKey: ['course-materials', courseId] });
+    },
+    onError: (err) => toast.error(getApiErrorMessage(err)),
+  });
   const recordingMutation = useMutation({
     mutationFn: () =>
       api.post(`/courses/${courseId}/materials`, {
         title: title.trim(),
+        ...(titleAr.trim() ? { titleAr: titleAr.trim() } : {}),
         type: effectiveUploadType,
         videoUrl: videoUrl.trim(),
         ...(weekNumber ? { weekNumber: Number(weekNumber) } : {}),
@@ -201,6 +251,19 @@ export function CourseMaterialsDialog({
           isAr ? 'أدخل رابط فيديو صحيح يبدأ بـ https://' : 'Enter a valid HTTPS video URL',
         );
       if (!files.length) {
+        if (editing && (editing.hasFile && editing.fileAvailable !== false || isValidVideoUrl)) {
+          editMutation.mutate({
+            id: editing._id,
+            payload: {
+              title: title.trim(),
+              titleAr: titleAr.trim(),
+              weekNumber: weekNumber ? Number(weekNumber) : null,
+              description: description.trim(),
+              videoUrl: videoUrl.trim(),
+            },
+          });
+          return;
+        }
         if (!isValidVideoUrl)
           throw new Error(isAr ? 'أضف ملفًا أو رابط فيديو' : 'Add a file or a video link');
         recordingMutation.mutate();
@@ -209,25 +272,28 @@ export function CourseMaterialsDialog({
       const selectedFiles = files;
       const payload = {
         title: title.trim(),
+        titleAr: titleAr.trim(),
         type: effectiveUploadType,
         weekNumber,
         description: description.trim(),
         videoUrl: videoUrl.trim(),
       };
       startUpload({
-        key: `material:${courseId}:${JSON.stringify(payload)}:${JSON.stringify(selectedFiles.map(({ name, size, lastModified }) => [name, size, lastModified]))}`,
+        key: `material:${editing?._id ?? courseId}:${JSON.stringify(payload)}:${JSON.stringify(selectedFiles.map(({ name, size, lastModified }) => [name, size, lastModified]))}`,
         courseId,
-        label: `${courseCode} · ${payload.title}`,
+        label: `${courseCode} · ${payload.titleAr || payload.title}`,
         fileName: files.length === 1 ? files[0].name : `${payload.title}.zip`,
         fileSize: totalFileSize,
         request: (config) => {
           const fd = new FormData();
           for (const file of selectedFiles) fd.append('file', file);
           fd.append('title', payload.title);
-          fd.append('type', payload.type);
-          if (payload.weekNumber) fd.append('weekNumber', String(Number(payload.weekNumber)));
-          if (payload.description) fd.append('description', payload.description);
-          if (payload.videoUrl) fd.append('videoUrl', payload.videoUrl);
+          if (editing || payload.titleAr) fd.append('titleAr', payload.titleAr);
+          if (!editing) fd.append('type', payload.type);
+          if (editing || payload.weekNumber) fd.append('weekNumber', payload.weekNumber);
+          if (editing || payload.description) fd.append('description', payload.description);
+          if (editing || payload.videoUrl) fd.append('videoUrl', payload.videoUrl);
+          if (editing) return api.patch(`/courses/materials/${editing._id}`, fd, config);
           return api.post(`/courses/${courseId}/materials`, fd, config);
         },
       });
@@ -305,7 +371,7 @@ export function CourseMaterialsDialog({
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent
           className="max-w-2xl max-h-[88vh] overflow-y-auto rounded-2xl border-border bg-card p-6"
           dir={isAr ? 'rtl' : 'ltr'}
@@ -408,16 +474,16 @@ export function CourseMaterialsDialog({
           </div>
 
           {/* Upload Form Box */}
-          {isUploadFormOpen && canUploadAny && (
+          {isUploadFormOpen && (canUploadAny || editing) && (
             <fieldset
-              disabled={recordingMutation.isPending}
+              disabled={recordingMutation.isPending || editMutation.isPending}
               className="min-w-0 rounded-xl border border-primary/30 bg-primary/5 p-4 text-start space-y-3 animate-in fade-in"
             >
               <div className="flex items-center justify-between pb-1 border-b border-primary/20">
                 <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
                   <UploadCloud className="h-4 w-4 text-primary" />
                   <span>
-                    {effectiveUploadType === 'lecture'
+                    {editing ? (isAr ? 'تعديل المحتوى' : 'Edit Material') : effectiveUploadType === 'lecture'
                       ? isAr
                         ? 'رفع محاضرة جديدة'
                         : 'Upload New Lecture'
@@ -430,7 +496,7 @@ export function CourseMaterialsDialog({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => setIsUploadFormOpen(false)}
+                  onClick={resetForm}
                   className="h-6 w-6 p-0 rounded-squircle text-muted-foreground hover:text-foreground"
                 >
                   <X className="h-3.5 w-3.5" />
@@ -443,7 +509,7 @@ export function CourseMaterialsDialog({
                   <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">
                     {isAr ? 'نوع المرفق' : 'Material Type'}
                   </label>
-                  {allowedTypes.length > 1 ? (
+                  {!editing && allowedTypes.length > 1 ? (
                     <div className="flex items-center gap-2">
                       <Button
                         type="button"
@@ -490,24 +556,44 @@ export function CourseMaterialsDialog({
                 </div>
               </div>
 
-              {/* Title */}
-              <div>
-                <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">
-                  {isAr ? 'عنوان المحاضرة أو السكشن *' : 'Title *'}
-                </label>
-                <Input
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder={
-                    isAr
-                      ? effectiveUploadType === 'lecture'
-                        ? 'مثال: المحاضرة الأولى - مقدمة في نظم المعلومات'
-                        : 'مثال: السكشن الأول - تدريبات عملية'
-                      : 'e.g., Week 1 - Introduction to Information Systems'
-                  }
-                  className="h-8 text-xs rounded-squircle"
-                />
+              {/* Title (English / Primary) & Optional Arabic Title */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">
+                    {isAr ? 'عنوان المحاضرة أو السكشن *' : 'Title *'}
+                  </label>
+                  <Input
+                    type="text"
+                    ref={titleInputRef}
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder={
+                      isAr
+                        ? effectiveUploadType === 'lecture'
+                          ? 'مثال: المحاضرة الأولى - مقدمة'
+                          : 'مثال: السكشن الأول - تدريبات عملية'
+                        : 'e.g., Week 1 - Introduction'
+                    }
+                    className="h-8 text-xs rounded-squircle"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">
+                    {isAr ? 'العنوان بالعربية (اختياري للترجمة)' : 'Arabic Title (Optional)'}
+                  </label>
+                  <Input
+                    type="text"
+                    dir="rtl"
+                    value={titleAr}
+                    onChange={(e) => setTitleAr(e.target.value)}
+                    placeholder={
+                      isAr
+                        ? 'يظهر عند تصفح البوابة بالعربية'
+                        : 'Displayed when viewing in Arabic'
+                    }
+                    className="h-8 text-xs rounded-squircle text-right"
+                  />
+                </div>
               </div>
 
               {/* Description */}
@@ -721,15 +807,15 @@ export function CourseMaterialsDialog({
                   type="button"
                   size="sm"
                   disabled={
-                    recordingMutation.isPending ||
+                    recordingMutation.isPending || editMutation.isPending ||
                     !title.trim() ||
-                    (!files.length && !isValidVideoUrl) ||
+                    (!files.length && !isValidVideoUrl && !(editing?.hasFile && editing?.fileAvailable !== false)) ||
                     (Boolean(videoUrl.trim()) && !isValidVideoUrl)
                   }
                   onClick={handleUpload}
                   className="h-8 rounded-squircle bg-primary text-xs font-semibold text-white hover:bg-primary-hover gap-1.5 cursor-pointer"
                 >
-                  {recordingMutation.isPending ? (
+                  {recordingMutation.isPending || editMutation.isPending ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   ) : !files.length ? (
                     <Video className="h-3.5 w-3.5" />
@@ -737,7 +823,7 @@ export function CourseMaterialsDialog({
                     <UploadCloud className="h-3.5 w-3.5" />
                   )}
                   <span>
-                    {!files.length
+                    {editing ? (isAr ? 'حفظ التعديلات' : 'Save Changes') : !files.length
                       ? isAr
                         ? 'حفظ رابط التسجيل'
                         : 'Save recording link'
@@ -780,26 +866,53 @@ export function CourseMaterialsDialog({
                 </p>
               </div>
             ) : (
-              <div className="divide-y divide-border/60 rounded-xl border border-border/80 bg-card/60 overflow-hidden">
+              <div role="list" className="divide-y divide-border/60 rounded-xl border border-border/80 bg-card/60 overflow-hidden">
                 {filteredMaterials.map((item) => {
                   const isLecture = item.type === 'lecture';
-                  const canDelete =
-                    !isStudent &&
-                    (isAdmin ||
-                      (user?.permissions?.includes(PERMISSIONS.COURSE_MATERIALS_DELETE) &&
-                        item.uploadedBy &&
-                        user?._id &&
-                        String(item.uploadedBy) === String(user._id)));
+                  const canDelete = !isStudent && item.canDelete;
                   const attachmentCount = item.attachments?.length ?? 0;
                   const hasFile =
                     item.hasFile ?? Boolean(item.mimeType || item.fileSize || !item.videoUrl);
+                  const isFileMissing = hasFile && item.fileAvailable === false;
+                  const canPreview =
+                    !(isStudent && isStudentBlocked) &&
+                    ((hasFile && !isFileMissing) || Boolean(item.videoUrl));
+                  const displayTitle = isAr ? item.titleAr || item.title : item.title;
+                  const localizedUploaderName = formatStaffDisplayName(
+                    {
+                      name: item.uploadedByName,
+                      nameAr: item.uploadedByNameAr,
+                      staffType: item.uploadedByRole === 'admin' ? undefined : item.uploadedByRole,
+                      role: item.uploadedByRole === 'admin' ? 'admin' : 'staff',
+                      titlePrefix: item.uploadedByTitlePrefix,
+                    },
+                    locale,
+                  );
 
                   return (
                     <div
                       key={item._id}
+                      role="listitem"
                       className="p-3 hover:bg-secondary/20 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-start"
                     >
-                      <div className="flex items-start gap-3 min-w-0">
+                      <div
+                        role={canPreview ? 'button' : undefined}
+                        tabIndex={canPreview ? 0 : undefined}
+                        onClick={canPreview ? () => setPreviewMaterialId(item._id) : undefined}
+                        onKeyDown={
+                          canPreview
+                            ? (event) => {
+                                if (event.key === 'Enter' || event.key === ' ') {
+                                  event.preventDefault();
+                                  setPreviewMaterialId(item._id);
+                                }
+                              }
+                            : undefined
+                        }
+                        className={`group flex items-start gap-3 min-w-0 flex-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                          canPreview ? 'cursor-pointer' : ''
+                        }`}
+                      >
                         {/* File Extension / Recording Icon */}
                         {!hasFile && item.videoUrl ? (
                           <div
@@ -848,9 +961,28 @@ export function CourseMaterialsDialog({
                               </span>
                             ) : null}
 
-                            <h5 className="text-xs font-bold text-foreground truncate">
-                              {item.title}
+                            <h5
+                              className={`text-xs font-bold text-foreground truncate transition-colors ${
+                                canPreview ? 'group-hover:text-primary' : ''
+                              }`}
+                            >
+                              <bdi>{displayTitle}</bdi>
                             </h5>
+
+                            {isFileMissing && (
+                              <span className="inline-flex items-center gap-1 rounded-squircle border border-amber-500/35 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                                <AlertTriangle className="h-3 w-3 shrink-0" />
+                                <span>
+                                  {isStudent
+                                    ? isAr
+                                      ? 'الملف غير متوفر حالياً'
+                                      : 'File unavailable'
+                                    : isAr
+                                      ? 'الملف مفقود على الخادم'
+                                      : 'File missing on server'}
+                                </span>
+                              </span>
+                            )}
                           </div>
 
                           {item.description ? (
@@ -860,10 +992,22 @@ export function CourseMaterialsDialog({
                           ) : null}
 
                           <div className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground/80">
-                            {item.uploadedByName ? (
+                            {localizedUploaderName ? (
                               <span className="flex items-center gap-1">
                                 <User className="h-3 w-3" />
-                                <span>{item.uploadedByName}</span>
+                                <span>
+                                  <bdi>{localizedUploaderName}</bdi> ·{' '}
+                                  {
+                                    {
+                                      doctor: isAr ? 'دكتور' : 'Doctor',
+                                      teaching_assistant: isAr ? 'معيد' : 'Teaching Assistant',
+                                      assistant_lecturer: isAr
+                                        ? 'مدرس مساعد'
+                                        : 'Assistant Lecturer',
+                                      admin: isAr ? 'الإدارة' : 'Administration',
+                                    }[item.uploadedByRole]
+                                  }
+                                </span>
                               </span>
                             ) : null}
 
@@ -874,7 +1018,11 @@ export function CourseMaterialsDialog({
                                   : `Files: ${attachmentCount}`}
                               </span>
                             )}
-                            {item.fileSize ? <span>• {formatFileSize(item.fileSize)}</span> : null}
+                            {item.fileSize ? (
+                              <span>
+                                • <bdi dir="ltr">{formatFileSize(item.fileSize)}</bdi>
+                              </span>
+                            ) : null}
 
                             {item.createdAt ? <span>• {formatDate(item.createdAt)}</span> : null}
                           </div>
@@ -882,7 +1030,7 @@ export function CourseMaterialsDialog({
                       </div>
 
                       {/* Item Actions */}
-                      <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                      <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5 self-stretch sm:max-w-[58%] sm:self-center">
                         {/* Download button with locked state for withheld students */}
                         {isStudent && isStudentBlocked ? (
                           <div
@@ -898,6 +1046,40 @@ export function CourseMaterialsDialog({
                           </div>
                         ) : (
                           <>
+                            {!isStudent && isFileMissing && item.canEdit && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openEdit(item)}
+                                className="h-8 rounded-squircle border-amber-500/35 bg-amber-500/10 px-2.5 text-xs font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 gap-1.5 cursor-pointer"
+                              >
+                                <UploadCloud className="h-3.5 w-3.5" />
+                                <span>{isAr ? 'إعادة رفع' : 'Re-upload'}</span>
+                              </Button>
+                            )}
+                            {(hasFile || item.videoUrl) && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={isFileMissing && !item.videoUrl}
+                                onClick={() => setPreviewMaterialId(item._id)}
+                                title={
+                                  isFileMissing && !item.videoUrl
+                                    ? isAr
+                                      ? 'الملف المادي غير متوفر على الخادم للمعاينة'
+                                      : 'File missing on server'
+                                    : isAr
+                                      ? 'معاينة المحتوى'
+                                      : 'Preview material'
+                                }
+                                className="h-8 rounded-squircle border-primary/35 bg-primary/10 px-2.5 text-xs font-semibold text-primary hover:bg-primary/20 gap-1.5 cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed"
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                                <span>{isAr ? 'معاينة' : 'Preview'}</span>
+                              </Button>
+                            )}
                             {item.videoUrl && (
                               <Button
                                 asChild
@@ -922,8 +1104,16 @@ export function CourseMaterialsDialog({
                                 type="button"
                                 variant="outline"
                                 size="sm"
+                                disabled={isFileMissing}
                                 onClick={() => handleDownload(item)}
-                                className="h-8 rounded-squircle text-xs font-semibold gap-1.5 hover:bg-primary/10 hover:text-primary cursor-pointer border-border"
+                                title={
+                                  isFileMissing
+                                    ? isAr
+                                      ? 'الملف المادي غير متوفر على الخادم'
+                                      : 'File missing on server'
+                                    : undefined
+                                }
+                                className="h-8 rounded-squircle text-xs font-semibold gap-1.5 hover:bg-primary/10 hover:text-primary cursor-pointer border-border disabled:opacity-45 disabled:cursor-not-allowed"
                               >
                                 <Download className="h-3.5 w-3.5 text-primary" />
                                 <span>
@@ -940,7 +1130,18 @@ export function CourseMaterialsDialog({
                           </>
                         )}
 
-                        {/* Delete button (Admin or Uploader) */}
+                        {!isStudent && item.canEdit && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openEdit(item)}
+                            className="h-8 w-8 p-0 rounded-squircle"
+                            aria-label={isAr ? 'تعديل المحتوى' : 'Edit Material'}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                         {canDelete && (
                           <Button
                             type="button"
@@ -966,7 +1167,7 @@ export function CourseMaterialsDialog({
               type="button"
               variant="secondary"
               size="sm"
-              onClick={() => onOpenChange(false)}
+              onClick={() => handleOpenChange(false)}
               className="rounded-squircle text-xs"
             >
               {isAr ? 'إغلاق' : 'Close'}
@@ -974,6 +1175,17 @@ export function CourseMaterialsDialog({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Material Preview Dialog */}
+      <CourseMaterialPreviewDialog
+        material={materialToPreview}
+        open={Boolean(materialToPreview)}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) setPreviewMaterialId(null);
+        }}
+        courseCode={courseCode}
+        locale={locale}
+      />
 
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog

@@ -8,6 +8,14 @@ import {
   CourseStaffAssignment,
   CourseStaffAssignmentDocument,
 } from '../../attendance/schemas/course-staff-assignment.schema';
+import {
+  courseStaffFilter,
+  courseGradeEntryFilter,
+  isAssignedToCourse,
+  isFacultyMember,
+  isSupportingAcademicStaff,
+  isTeachingStaff,
+} from '../../courses/utils/course-staff.util';
 
 /** What the current user may do in Control. Sent to the UI and re-checked here. */
 export interface ControlCapabilities {
@@ -31,6 +39,7 @@ export interface ControlCapabilities {
   canLock: boolean;
   canUnlock: boolean;
   canManageSchemes: boolean;
+  canManageStaffEntry: boolean;
   canViewAudit: boolean;
   scopeAll: boolean;
 }
@@ -79,6 +88,8 @@ export class ControlAccessService {
       canLock: gated(PERMISSIONS.CONTROL_SHEETS_LOCK),
       canUnlock: gated(PERMISSIONS.CONTROL_SHEETS_UNLOCK),
       canManageSchemes: gated(PERMISSIONS.CONTROL_SCHEMES_MANAGE),
+      canManageStaffEntry:
+        user.role === 'admin' || gated(PERMISSIONS.CONTROL_STAFF_ENTRY_MANAGE),
       canViewAudit: gated(PERMISSIONS.CONTROL_AUDIT_VIEW),
       scopeAll: gated(PERMISSIONS.CONTROL_SCOPE_ALL),
     };
@@ -96,8 +107,10 @@ export class ControlAccessService {
 
   /**
    * Course scope: `control.scope.all` (or admin) sees every course; otherwise
-   * the user must be assigned to the course for the term, either through an
-   * active staff assignment or as the course's doctor/teaching assistant.
+   * the user must be assigned to the course for the term.
+   * For supporting academic staff (`teaching_assistant` / `assistant_lecturer`)
+   * without `scopeAll`, courses are strictly hidden in Control unless explicitly
+   * granted in `gradeEntryStaffIds` on that course.
    */
   async hasCourseScope(
     user: AuthenticatedUser,
@@ -120,11 +133,22 @@ export class ControlAccessService {
       this.courseModel
         .exists({
           _id: course._id,
-          $or: [{ doctorIds: staffId }, { teachingAssistantIds: staffId }],
+          ...courseStaffFilter(user._id),
         })
         .lean(),
     ]);
-    return Boolean(assignment || owned);
+    if (!assignment && !owned) return false;
+    if (this.requiresSupportingGrant(user)) {
+      return Boolean(
+        await this.courseModel
+          .exists({
+            _id: course._id,
+            ...courseGradeEntryFilter(staffId),
+          })
+          .lean(),
+      );
+    }
+    return true;
   }
 
   async assertCourseIdScope(
@@ -152,6 +176,169 @@ export class ControlAccessService {
     }
   }
 
+  /**
+   * Faculty doctors (`doctor`) are automatically authorized to write grades for
+   * their assigned courses. Supporting academic staff (`teaching_assistant` and
+   * `assistant_lecturer`) are blocked by default unless explicitly listed in
+   * `course.gradeEntryStaffIds` for that specific course.
+   */
+  async canWriteCourseGrades(
+    user: AuthenticatedUser,
+    courseId: string | Types.ObjectId,
+  ) {
+    if (
+      user.role === 'admin' ||
+      (user.role === 'staff' && !isTeachingStaff(user.staffType)) ||
+      process.env.CONTROL_COURSE_GRADE_GRANTS_ENFORCED === 'false'
+    )
+      return true;
+    if (user.role !== 'staff') return false;
+    const staffId = new Types.ObjectId(user._id);
+
+    if (isFacultyMember(user.staffType)) {
+      const assignedOnCourse = await this.courseModel
+        .exists({
+          _id: courseId,
+          ...courseStaffFilter(user._id),
+        })
+        .lean();
+      if (assignedOnCourse) return true;
+      if (
+        typeof this.courseModel.findById === 'function' &&
+        typeof this.assignmentModel?.exists === 'function'
+      ) {
+        const course = await this.courseModel
+          .findById(courseId)
+          .select('code')
+          .lean();
+        if (course?.code) {
+          return Boolean(
+            await this.assignmentModel
+              .exists({
+                staffId,
+                courseCode: String(course.code).toUpperCase(),
+                isActive: true,
+              })
+              .lean(),
+          );
+        }
+      }
+      return false;
+    }
+
+    const grantedOnCourse = await this.courseModel
+      .exists({
+        _id: courseId,
+        $and: [courseGradeEntryFilter(staffId)],
+        ...courseStaffFilter(user._id),
+      })
+      .lean();
+    if (grantedOnCourse) return true;
+
+    if (
+      typeof this.courseModel.findOne === 'function' &&
+      typeof this.assignmentModel?.exists === 'function'
+    ) {
+      const grantedCourse = await this.courseModel
+        .findOne({
+          _id: courseId,
+          ...courseGradeEntryFilter(staffId),
+        })
+        .select('code')
+        .lean();
+      if (grantedCourse?.code) {
+        return Boolean(
+          await this.assignmentModel
+            .exists({
+              staffId,
+              courseCode: String(grantedCourse.code).toUpperCase(),
+              isActive: true,
+            })
+            .lean(),
+        );
+      }
+    }
+    return false;
+  }
+
+  async assertCourseGradeWrite(
+    user: AuthenticatedUser,
+    courseId: string | Types.ObjectId,
+  ) {
+    if (!(await this.canWriteCourseGrades(user, courseId))) {
+      throw new ForbiddenException(
+        'Grade entry is not assigned for this course',
+      );
+    }
+  }
+
+  async petitionScope(
+    user: AuthenticatedUser,
+    term: { academicYear?: string; semester?: string },
+  ): Promise<Record<string, unknown>> {
+    if (this.getCapabilities(user).scopeAll) return {};
+    const staffId = new Types.ObjectId(user._id);
+    const assignmentFilter = {
+      staffId,
+      isActive: true,
+      ...(term.academicYear ? { academicYear: term.academicYear } : {}),
+      ...(term.semester ? { semester: term.semester } : {}),
+    };
+    const assignments = await this.assignmentModel
+      .find(assignmentFilter)
+      .select('courseCode academicYear semester')
+      .lean();
+    const codes = [
+      ...new Set(assignments.map((item) => item.courseCode.toUpperCase())),
+    ];
+    const direct = courseStaffFilter(user._id);
+    const requiresGrant = this.requiresSupportingGrant(user);
+    const scoped = await this.courseModel
+      .find({
+        ...(requiresGrant ? { $and: [courseGradeEntryFilter(staffId)] } : {}),
+        $or: [...(direct.$or ?? []), { code: { $in: codes } }],
+      })
+      .select(
+        '_id code doctorId doctorIds doctors teachingAssistantId teachingAssistant teachingAssistantIds teachingAssistants',
+      )
+      .lean();
+    const byCode = new Map(
+      scoped.map((course) => [course.code.toUpperCase(), course._id]),
+    );
+    const directIds = scoped
+      .filter((course) => isAssignedToCourse(course, user._id))
+      .map((course) => course._id);
+    const byTerm = new Map<
+      string,
+      {
+        academicYear: string;
+        semester: string;
+        courseId: { $in: Types.ObjectId[] };
+      }
+    >();
+    for (const { courseCode, academicYear, semester } of assignments) {
+      const id = byCode.get(courseCode.toUpperCase());
+      if (!id) continue;
+      const key = JSON.stringify([academicYear, semester]);
+      const entry = byTerm.get(key) ?? {
+        academicYear,
+        semester,
+        courseId: { $in: [] },
+      };
+      entry.courseId.$in.push(id);
+      byTerm.set(key, entry);
+    }
+    return { $or: [{ courseId: { $in: directIds } }, ...byTerm.values()] };
+  }
+
+  private requiresSupportingGrant(user: AuthenticatedUser) {
+    return (
+      user.role === 'staff' &&
+      isSupportingAcademicStaff(user.staffType) &&
+      process.env.CONTROL_COURSE_GRADE_GRANTS_ENFORCED !== 'false'
+    );
+  }
+
   /** `null` means unrestricted; otherwise the course ids the user may open. */
   async listScopedCourseIds(
     user: AuthenticatedUser,
@@ -165,12 +352,7 @@ export class ControlAccessService {
         .find({ staffId, academicYear, semester, isActive: true })
         .select('courseCode')
         .lean(),
-      this.courseModel
-        .find({
-          $or: [{ doctorIds: staffId }, { teachingAssistantIds: staffId }],
-        })
-        .select('_id')
-        .lean(),
+      this.courseModel.find(courseStaffFilter(user._id)).select('_id').lean(),
     ]);
     const codes = assignments.map((a) => String(a.courseCode).toUpperCase());
     const byCode = codes.length
@@ -181,6 +363,18 @@ export class ControlAccessService {
       : [];
     const ids = new Map<string, Types.ObjectId>();
     for (const c of [...owned, ...byCode]) ids.set(String(c._id), c._id);
-    return [...ids.values()];
+    const scopedIds = [...ids.values()];
+    if (this.requiresSupportingGrant(user)) {
+      if (scopedIds.length === 0) return [];
+      const granted = await this.courseModel
+        .find({
+          _id: { $in: scopedIds },
+          ...courseGradeEntryFilter(staffId),
+        })
+        .select('_id')
+        .lean();
+      return granted.map((c) => c._id);
+    }
+    return scopedIds;
   }
 }

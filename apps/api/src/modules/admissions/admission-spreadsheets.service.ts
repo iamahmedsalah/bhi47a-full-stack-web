@@ -45,7 +45,10 @@ const HEADERS = [
   'PassedCourses',
   'ReasonCode',
   'Reason',
+  'MinistryStatus',
+  'EnrollmentEffectiveDate',
 ];
+const LEGACY_HEADER_COUNT = 20;
 const MAX_ROWS = 500;
 export interface AdmissionWorkbookFile {
   buffer: Buffer;
@@ -127,12 +130,16 @@ export function validateAdmissionWorkbook(buffer: Buffer) {
 @Injectable()
 export class AdmissionSpreadsheets {
   constructor(private readonly workflow: AdmissionWorkflowService) {}
-  async workbook(query: AdmissionListDto, template = false) {
+  async workbook(
+    query: AdmissionListDto,
+    template = false,
+    actor?: AuthenticatedUser,
+  ) {
     const workbook = new ExcelJS.Workbook(),
       sheet = workbook.addWorksheet('Requests');
     sheet.addRow(HEADERS);
     if (!template) {
-      const filter = this.workflow.filter(query);
+      const filter = this.workflow.filter(query, actor);
       if ((await this.workflow.requests.countDocuments(filter)) > MAX_ROWS)
         throw new BadRequestException(
           'Narrow the filters to at most 500 requests before exporting.',
@@ -161,15 +168,17 @@ export class AdmissionSpreadsheets {
             item.semester ?? '1',
             item.department ?? 'GENERAL',
             String(item.groupId ?? ''),
-            item.passedCourses.join(','),
+            (item.passedCourses ?? []).join(','),
             '',
             '',
+            item.ministryStatus === 'PENDING' ? 'PENDING' : '',
+            item.enrollmentEffectiveDate ?? '',
           ].map(safeAdmissionCell),
         );
       }
     }
     sheet.views = [{ state: 'frozen', ySplit: 1 }];
-    sheet.autoFilter = { from: 'A1', to: 'T1' };
+    sheet.autoFilter = { from: 'A1', to: 'V1' };
     sheet.getRow(1).eachCell((cell) => {
       cell.fill = {
         type: 'pattern',
@@ -194,6 +203,7 @@ export class AdmissionSpreadsheets {
       'UPDATE replaces applicant details. GuardiansJSON is an array of name, phone and relationship objects.',
       'APPROVE needs Level 1â€“4, Semester 1â€“2, Department, optional GroupId and comma-separated PassedCourses.',
       'NEW applicants start at level 1 with no passed courses. TRANSFER needs PreviousInstitution.',
+      'For the new lifecycle, use EnrollmentEffectiveDate (YYYY-MM-DD) for coordination or level 2 and MinistryStatus PENDING for transfers. Upload ministry evidence in Student Affairs.',
       'Levels 1 and 2 use GENERAL. Phone: 010/011/012/015 plus 8 digits; keep as text.',
       'REJECT requires ReasonCode: INELIGIBLE, CAPACITY, INVALID_INFORMATION or OTHER, and a written Reason.',
       'WAITLIST/PENDING/CANCEL require a written Reason. Cancellation keeps the code held for identity safety.',
@@ -222,6 +232,8 @@ export class AdmissionSpreadsheets {
             passedCourses: data.PassedCourses.split(',')
               .map((s) => s.trim())
               .filter(Boolean),
+            ministryStatus: data.MinistryStatus || undefined,
+            enrollmentEffectiveDate: data.EnrollmentEffectiveDate || undefined,
           }
         : action === 'UPDATE'
           ? {
@@ -297,13 +309,13 @@ export class AdmissionSpreadsheets {
     if (
       !sheet ||
       sheet.rowCount > MAX_ROWS + 1 ||
-      sheet.columnCount !== HEADERS.length
+      ![HEADERS.length, LEGACY_HEADER_COUNT].includes(sheet.columnCount)
     )
       throw new BadRequestException(
         'Use the Requests template with at most 500 data rows.',
       );
     if (
-      HEADERS.some(
+      HEADERS.slice(0, sheet.columnCount).some(
         (header, index) => sheet.getRow(1).getCell(index + 1).value !== header,
       )
     )
@@ -316,7 +328,7 @@ export class AdmissionSpreadsheets {
       const row: AdmissionImportRow = { row: n, state: 'INVALID' };
       try {
         const data: Record<string, string> = {};
-        HEADERS.forEach((key, index) => {
+        HEADERS.slice(0, sheet.columnCount).forEach((key, index) => {
           const value = sheet.getRow(n).getCell(index + 1).value;
           if (
             value !== null &&

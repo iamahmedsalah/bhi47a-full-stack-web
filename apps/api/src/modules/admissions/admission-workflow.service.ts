@@ -20,6 +20,8 @@ import {
   isAdmissionNationalId,
   PERMISSIONS,
   type AdmissionRequestStatus,
+  type MinistryStatus,
+  type OfficialEnrollmentStatus,
 } from '@student-portal/shared';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request';
 import { PasswordHasher } from '../../security/password-hasher';
@@ -48,6 +50,8 @@ import {
   PublicAccessDto,
   PublicApplicantDto,
   PublicStatusDto,
+  PublicCorrectionDto,
+  MinistryEvidenceDto,
   UpdateAdmissionGroupDto,
   UpdateApplicantDto,
 } from './dto/admission-workflow.dto';
@@ -56,6 +60,10 @@ import {
   createPaginatedResult,
 } from '../../common/utils/pagination.util';
 import { normalizeSearchTerm } from '../../common/utils/search.util';
+import {
+  attachMinistryEvidence,
+  validateEnrollmentDate,
+} from './admission-evidence';
 
 export function admissionConflict(
   message = 'The request changed. Refresh and retry.',
@@ -572,7 +580,9 @@ export class AdmissionWorkflowService {
           await this.requests
             .exists({
               nationalIdLookup: lookup,
-              status: { $in: ['PENDING', 'WAITLISTED', 'APPROVED'] },
+              status: {
+                $in: ['PENDING', 'WAITLISTED', 'NEEDS_CORRECTION', 'APPROVED'],
+              },
             })
             .session(session),
         ) ||
@@ -669,21 +679,43 @@ export class AdmissionWorkflowService {
       throw new NotFoundException('Request reference or secret is invalid.');
     return {
       publicReference: item.publicReference,
-      status: admissionApplicantStatus(item.status, Boolean(item.studentId)),
+      status:
+        item.ministryStatus === 'REJECTED' && item.studentId
+          ? 'CANCELLED'
+          : admissionApplicantStatus(item.status, Boolean(item.studentId)),
       studentCode: item.duplicateReviewRequired
         ? undefined
         : (item.studentCode ?? item.formerStudentCode),
       rejection: item.rejection,
+      ...(item.status === 'NEEDS_CORRECTION' &&
+      item.correctionInstructions &&
+      !item.deletedAt &&
+      !item.duplicateReviewRequired
+        ? {
+            correction: {
+              instructions: item.correctionInstructions,
+              revision: item.revision,
+              applicant: this.applicantFields(item),
+            },
+          }
+        : {}),
+      ministryStatus: item.ministryStatus,
+      officialEnrollmentStatus: item.officialEnrollmentStatus,
       waitlistPosition: item.duplicateReviewRequired
         ? undefined
         : await this.position(item),
     };
   }
-  filter(query: AdmissionListDto): FilterQuery<AdmissionRequest> {
+  filter(
+    query: AdmissionListDto,
+    actor?: AuthenticatedUser,
+  ): FilterQuery<AdmissionRequest> {
+    if (query.queue === 'archive' && actor)
+      assertAdmissionPermission(actor, PERMISSIONS.ADMISSIONS_ARCHIVE_READ);
     const filter: FilterQuery<AdmissionRequest> = {
       deletedAt: { $exists: false },
     };
-    if (query.status === 'REJECTED')
+    if (!query.queue && query.status === 'REJECTED')
       filter.$and = [
         {
           $or: [
@@ -692,10 +724,30 @@ export class AdmissionWorkflowService {
           ],
         },
       ];
-    else if (query.status === 'CANCELLED') {
+    else if (!query.queue && query.status === 'CANCELLED') {
       filter.status = 'CANCELLED';
       filter.studentId = { $exists: true };
-    } else if (query.status) filter.status = query.status;
+    } else if (!query.queue && query.status) filter.status = query.status;
+    switch (query.queue) {
+      case 'review':
+        filter.status = 'PENDING';
+        break;
+      case 'correction':
+        filter.status = 'NEEDS_CORRECTION';
+        break;
+      case 'transfers':
+        filter.status = 'APPROVED';
+        filter.ministryStatus = 'PENDING';
+        break;
+      case 'ready':
+        filter.status = 'APPROVED';
+        filter.ministryStatus = 'APPROVED';
+        filter.officialEnrollmentStatus = 'PROVISIONAL';
+        break;
+      case 'archive':
+        filter.ministryStatus = 'REJECTED';
+        break;
+    }
     if (query.academicYear) filter.academicYear = query.academicYear;
     if (query.search) {
       const regex = new RegExp(normalizeSearchTerm(query.search), 'i');
@@ -711,11 +763,22 @@ export class AdmissionWorkflowService {
         ...(query.from ? { $gte: new Date(query.from) } : {}),
         ...(query.to ? { $lte: new Date(query.to) } : {}),
       };
+    if (
+      actor &&
+      actor.role !== 'admin' &&
+      !actor.permissions.some(
+        (permission) =>
+          permission === PERMISSIONS.ADMISSIONS_ARCHIVE_READ ||
+          permission === PERMISSIONS.ADMISSIONS_DECISIONS_CORRECT ||
+          permission === PERMISSIONS.ADMISSIONS_MINISTRY_MANAGE,
+      )
+    )
+      filter.ministryStatus ??= { $ne: 'REJECTED' };
     return filter;
   }
   async listRequests(query: AdmissionListDto, actor?: AuthenticatedUser) {
     const { page, limit, skip } = buildPaginationOptions(query),
-      filter = this.filter(query);
+      filter = this.filter(query, actor);
     const [rawItems, total] = await Promise.all([
       this.requests
         .find(filter)
@@ -731,6 +794,17 @@ export class AdmissionWorkflowService {
       Boolean(
         actor?.permissions?.includes(PERMISSIONS.STUDENTS_VIEW_NATIONAL_ID),
       );
+    const enabled = new Set(
+      (
+        await this.store.periods
+          .find({
+            _id: { $in: rawItems.map((item) => item.admissionPeriodId) },
+            lifecycleEnabled: true,
+          })
+          .select('_id')
+          .lean()
+      ).map((period) => String(period._id)),
+    );
     const items = rawItems.map((item) => {
       const { nationalIdEncrypted, ...visible } = item as Record<string, any>;
       let nationalId = visible.nationalId;
@@ -744,6 +818,9 @@ export class AdmissionWorkflowService {
       return {
         ...visible,
         status: admissionApplicantStatus(item.status, Boolean(item.studentId)),
+        lifecycleEnabled:
+          enabled.has(String(item.admissionPeriodId)) ||
+          Boolean(item.ministryStatus),
         nationalId: nationalId ?? visible.nationalIdMasked,
       };
     });
@@ -755,10 +832,28 @@ export class AdmissionWorkflowService {
       .select('+nationalIdEncrypted')
       .lean();
     if (!item || item.deletedAt) throw new NotFoundException();
+    if (
+      item.ministryStatus === 'REJECTED' &&
+      actor.role !== 'admin' &&
+      !actor.permissions.some(
+        (permission) =>
+          permission === PERMISSIONS.ADMISSIONS_ARCHIVE_READ ||
+          permission === PERMISSIONS.ADMISSIONS_DECISIONS_CORRECT ||
+          permission === PERMISSIONS.ADMISSIONS_MINISTRY_MANAGE,
+      )
+    )
+      throw new NotFoundException();
     const { nationalIdEncrypted, ...visible } = item;
     return {
       ...visible,
       status: admissionApplicantStatus(item.status, Boolean(item.studentId)),
+      lifecycleEnabled: Boolean(
+        item.ministryStatus ||
+        (await this.store.periods.exists({
+          _id: item.admissionPeriodId,
+          lifecycleEnabled: true,
+        })),
+      ),
       waitlistPosition: await this.position(item),
       nationalId:
         actor.role === 'admin' ||
@@ -766,6 +861,89 @@ export class AdmissionWorkflowService {
           ? this.security.decrypt(nationalIdEncrypted)
           : undefined,
     };
+  }
+  async requestCorrection(
+    id: string,
+    dto: DecisionDto,
+    actor: AuthenticatedUser,
+  ) {
+    assertAdmissionPermission(actor, PERMISSIONS.ADMISSIONS_REQUESTS_UPDATE);
+    if (!dto.reason?.trim())
+      throw new BadRequestException('Provide instructions for the applicant.');
+    return this.transactions.run(async (session) => {
+      const changed = await this.requests.updateOne(
+        {
+          _id: admissionId(id),
+          status: { $in: ['PENDING', 'WAITLISTED'] },
+          revision: dto.revision,
+          deletedAt: { $exists: false },
+          duplicateReviewRequired: { $ne: true },
+        },
+        {
+          $set: {
+            status: 'NEEDS_CORRECTION',
+            correctionInstructions: dto.reason,
+          },
+          $inc: { revision: 1 },
+          $push: {
+            history: this.event(
+              actor._id,
+              'NEEDS_CORRECTION',
+              dto.revision + 1,
+              dto.reason,
+            ),
+          },
+        },
+        { session },
+      );
+      if (!changed.modifiedCount) admissionConflict();
+      return { revision: dto.revision + 1, status: 'NEEDS_CORRECTION' };
+    }, this.prepare);
+  }
+
+  async resubmitCorrection(dto: PublicCorrectionDto, ip?: string) {
+    this.validateApplicant(dto);
+    const credentials = {
+      publicReference: dto.publicReference,
+      statusSecretHash: admissionHash(dto.secret),
+    };
+    const candidate = await this.requests
+      .findOne({ ...credentials, deletedAt: { $exists: false } })
+      .lean();
+    if (!candidate)
+      throw new NotFoundException('Request reference or secret is invalid.');
+    if (
+      candidate.status === 'PENDING' &&
+      candidate.revision === dto.revision + 1 &&
+      candidate.history.at(-1)?.action === 'CORRECTION_SUBMITTED'
+    )
+      return { status: 'PENDING' };
+    await this.security.captcha(dto.captchaToken, ip);
+    return this.transactions.run(async (session) => {
+      const changed = await this.requests.updateOne(
+        {
+          ...credentials,
+          status: 'NEEDS_CORRECTION',
+          revision: dto.revision,
+          deletedAt: { $exists: false },
+        },
+        {
+          $set: { ...this.applicantFields(dto), status: 'PENDING' },
+          $unset: { correctionInstructions: 1 },
+          $inc: { revision: 1 },
+          $push: {
+            history: this.event(
+              undefined,
+              'CORRECTION_SUBMITTED',
+              dto.revision + 1,
+            ),
+          },
+        },
+        { session },
+      );
+      if (!changed.modifiedCount) admissionConflict();
+      return { status: 'PENDING' };
+    }, this.prepare);
   }
   async update(
     id: string,
@@ -920,6 +1098,20 @@ export class AdmissionWorkflowService {
     const passwordHash = await this.passwords.hash(nationalId);
     // Bcrypt is deliberately outside the transaction and its retry callback.
     const studentId = new Types.ObjectId();
+    let lifecycleEnabled = false;
+    let ministryStatus: MinistryStatus | undefined;
+    let officialEnrollmentStatus: OfficialEnrollmentStatus | undefined;
+    let ministryEvidence: MinistryEvidenceDto | undefined;
+    const lifecycleFields = () =>
+      lifecycleEnabled
+        ? {
+            ministryStatus,
+            officialEnrollmentStatus,
+            ...(dto.enrollmentEffectiveDate
+              ? { enrollmentEffectiveDate: dto.enrollmentEffectiveDate }
+              : {}),
+          }
+        : {};
     await this.prepare();
     await this.allocator.allocate(
       initial.academicYear,
@@ -965,13 +1157,29 @@ export class AdmissionWorkflowService {
               nationalIdMasked: initial.nationalIdMasked,
               phone: initial.phone,
               address: initial.address,
-              guardians: initial.guardians ?? [],
+              guardians: (initial.guardians ?? []).map(
+                ({ name, phone, relationship }) => ({
+                  name,
+                  phone,
+                  relation: relationship,
+                }),
+              ),
               level: dto.level,
               semester: dto.semester,
               department: dto.department,
               academicYear: initial.academicYear,
               group: group?.nameAr || group?.name,
               enrollmentStatus: 'active',
+              ...lifecycleFields(),
+              ...(lifecycleEnabled
+                ? {
+                    tuitionFeesStatus: 'unpaid',
+                    admissionType:
+                      initial.studentType === 'TRANSFER'
+                        ? 'TRANSFER'
+                        : 'COORDINATION',
+                  }
+                : {}),
             },
           ],
           { session },
@@ -1006,19 +1214,28 @@ export class AdmissionWorkflowService {
               department: dto.department,
               semester: dto.semester,
               passedCourses: dto.passedCourses,
+              ...lifecycleFields(),
               ...(dto.groupId ? { groupId: admissionId(dto.groupId) } : {}),
             },
             ...(dto.groupId ? {} : { $unset: { groupId: 1 } }),
             $inc: { revision: 1 },
             $push: {
-              history: this.event(actor._id, 'APPROVED', dto.revision + 1),
+              history: {
+                ...this.event(actor._id, 'APPROVED', dto.revision + 1),
+                ...(lifecycleEnabled
+                  ? { details: { ...lifecycleFields(), ministryEvidence } }
+                  : {}),
+              },
             },
           },
           { session },
         );
         if (result.modifiedCount !== 1) admissionConflict();
         await this.recordImport(context, session);
-        return { studentId: String(studentId) };
+        return {
+          studentId: String(studentId),
+          protectAssignment: lifecycleEnabled,
+        };
       },
       async (session) => {
         const now = new Date();
@@ -1042,6 +1259,52 @@ export class AdmissionWorkflowService {
             message:
               'Admission is closed. Reopen the period before approving new or transfer students.',
           });
+        lifecycleEnabled = openPeriod.lifecycleEnabled === true;
+        ministryEvidence = undefined;
+        ministryStatus = undefined;
+        officialEnrollmentStatus = undefined;
+        if (lifecycleEnabled) {
+          const transfer = initial.studentType === 'TRANSFER';
+          if (
+            transfer
+              ? dto.level !== '2' || !dto.ministryStatus
+              : !dto.enrollmentEffectiveDate || Boolean(dto.ministryStatus)
+          )
+            throw new BadRequestException(
+              'Confirm the official enrollment date for coordination or select level 2 and ministry status for a transfer.',
+            );
+          ministryStatus = transfer ? dto.ministryStatus : 'NOT_REQUIRED';
+          if (ministryStatus === 'PENDING' && dto.enrollmentEffectiveDate)
+            throw new BadRequestException(
+              'A pending transfer cannot be officially enrolled.',
+            );
+          if (ministryStatus === 'APPROVED') {
+            assertAdmissionPermission(
+              actor,
+              PERMISSIONS.ADMISSIONS_MINISTRY_MANAGE,
+            );
+            ministryEvidence = await attachMinistryEvidence(
+              this.store.connection,
+              requestId,
+              admissionId(actor._id),
+              dto.ministryEvidence,
+              session,
+            );
+          }
+          if (dto.enrollmentEffectiveDate) {
+            assertAdmissionPermission(
+              actor,
+              PERMISSIONS.ADMISSIONS_ENROLLMENT_CONFIRM,
+            );
+            validateEnrollmentDate(
+              dto.enrollmentEffectiveDate,
+              ministryEvidence?.decisionDate,
+            );
+          }
+          officialEnrollmentStatus = dto.enrollmentEffectiveDate
+            ? 'ENROLLED'
+            : 'PROVISIONAL';
+        }
         const current = await this.requests
           .findById(requestId)
           .select('+nationalIdEncrypted')
@@ -1170,6 +1433,8 @@ export class AdmissionWorkflowService {
         if (!item || item.deletedAt) throw new NotFoundException();
         if (item.status === 'CANCELLED')
           return { status: 'CANCELLED', codeReleased: false };
+        if (item.officialEnrollmentStatus === 'CANCELLED')
+          admissionConflict('This enrollment has already been archived.');
         if (
           item.status !== 'APPROVED' ||
           item.revision !== dto.revision ||
@@ -1195,6 +1460,9 @@ export class AdmissionWorkflowService {
               deactivatedAt: new Date(),
               deactivatedBy: admissionId(actor._id),
               deactivationReason: dto.reason,
+              ...(item.officialEnrollmentStatus
+                ? { admissionArchivedAt: new Date() }
+                : {}),
             },
             $inc: { tokenVersion: 1 },
             $unset: { refreshTokenHash: 1, refreshTokenExpiresAt: 1 },
@@ -1204,7 +1472,14 @@ export class AdmissionWorkflowService {
         if (user.matchedCount !== 1) admissionConflict();
         await this.store.profiles.updateOne(
           { studentCode: item.studentCode },
-          { $set: { enrollmentStatus: 'inactive' } },
+          {
+            $set: {
+              enrollmentStatus: 'inactive',
+              ...(item.officialEnrollmentStatus
+                ? { officialEnrollmentStatus: 'CANCELLED' }
+                : {}),
+            },
+          },
           { session },
         );
         if (item.groupId) {
@@ -1222,7 +1497,12 @@ export class AdmissionWorkflowService {
         await this.requests.updateOne(
           { _id: item._id, revision: dto.revision },
           {
-            $set: { status: 'CANCELLED' },
+            $set: {
+              status: 'CANCELLED',
+              ...(item.officialEnrollmentStatus
+                ? { officialEnrollmentStatus: 'CANCELLED' }
+                : {}),
+            },
             $inc: { revision: 1 },
             $push: {
               history: this.event(

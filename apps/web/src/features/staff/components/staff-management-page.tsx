@@ -31,6 +31,7 @@ import {
   formatStaffDisplayName,
   getCleanStaffName,
   getStaffRoleLabel,
+  isAcademicTeachingStaff,
   type Permission,
   type StaffType,
 } from "@student-portal/shared";
@@ -118,9 +119,23 @@ export function StaffManagementPage() {
       staffType:
         values.role === "admin" ? undefined : (values.staffType as StaffType),
       titlePrefix:
-        values.staffType === "doctor" ? values.titlePrefix || "dr" : undefined,
+        values.staffType === "doctor"
+          ? values.titlePrefix || "dr"
+          : values.staffType === "dean"
+            ? values.titlePrefix || undefined
+            : undefined,
       ...(canManageStaff && values.role === "staff"
-        ? { courseIds: values.courseIds, ...(isAdmin ? { permissions: values.permissions } : {}) }
+        ? {
+            courseIds: values.courseIds,
+            ...(isAdmin
+              ? {
+                  permissions: values.permissions,
+                  ...(values.gradeEntryCourseIds !== undefined
+                    ? { gradeEntryCourseIds: values.gradeEntryCourseIds }
+                    : {}),
+                }
+              : {}),
+          }
         : {}),
     };
     if (editing) {
@@ -227,6 +242,10 @@ export function StaffManagementPage() {
         return "border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400";
       case "assistant_lecturer":
         return "border-cyan-500/30 bg-cyan-500/10 text-cyan-600 dark:text-cyan-400";
+      case "dean":
+        return "border-purple-500/30 bg-purple-500/10 text-purple-600 dark:text-purple-400";
+      case "control":
+        return "border-orange-500/30 bg-orange-500/10 text-orange-600 dark:text-orange-400";
       case "accountant":
         return "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
       default:
@@ -236,9 +255,10 @@ export function StaffManagementPage() {
 
   const renderStaffActionsMenu = (staff: StaffMember) => {
     const isTargetAdmin = staff.role === "admin";
-    const isTargetAdministrative = staff.staffType === "administrative";
+    const canDelegateAccountManagement =
+      isAcademicTeachingStaff(staff.staffType) && staff.staffType !== "doctor";
     const canModifyTarget =
-      isAdmin || (canManageStaff && !isTargetAdmin && !isTargetAdministrative);
+      isAdmin || (canManageStaff && !isTargetAdmin && canDelegateAccountManagement);
 
     return (
       <DropdownMenu.Root dir={isAr ? "rtl" : "ltr"}>

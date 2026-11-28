@@ -1,5 +1,6 @@
 import { curriculumDepartmentLabel } from '@student-portal/shared';
 import { StudentCodesService } from '../student-codes/student-codes.service';
+import { assertEnrollmentCanBeActivated } from '../admissions/enrollment-policy';
 import {
   Injectable,
   NotFoundException,
@@ -301,6 +302,7 @@ export class StudentsService {
       (academicProfile?.completedCourses?.length
         ? academicProfile.completedCourses.length * 3
         : 0);
+    const gpa = academicProfile?.gpa ?? profileObj.gpa ?? 0;
 
     return {
       ...profileObj,
@@ -309,7 +311,13 @@ export class StudentsService {
       googleEmail: user.googleEmail ?? '',
       googleLinkedAt: user.googleLinkedAt,
       googleLinkPending: user.googleLinkPending ?? false,
-      gpa: academicProfile?.gpa ?? profileObj.gpa ?? 0,
+      gpa,
+      hasAcademicResults: Boolean(
+        gpa > 0 ||
+        completedCreditHours > 0 ||
+        academicProfile?.completedCourses?.length ||
+        academicProfile?.failedCourses?.length,
+      ),
       academicWarnings:
         academicProfile?.academicWarnings ?? profileObj.academicWarnings ?? 0,
       completedCreditHours,
@@ -366,12 +374,21 @@ export class StudentsService {
       profileUpdates.fullNameEn = dto.fullNameEn;
     }
 
-    const profile = await this.studentProfileModel.findByIdAndUpdate(
-      id,
-      { $set: profileUpdates },
-      { new: true, runValidators: true },
-    );
+    const update = { $set: profileUpdates };
+    const options = { new: true, runValidators: true };
+    const activate = dto.enrollmentStatus === 'active';
+    const profile = activate
+      ? await this.studentProfileModel.findOneAndUpdate(
+          { _id: id, officialEnrollmentStatus: { $ne: 'CANCELLED' } },
+          update,
+          options,
+        )
+      : await this.studentProfileModel.findByIdAndUpdate(id, update, options);
     if (!profile) {
+      if (activate)
+        assertEnrollmentCanBeActivated(
+          await this.studentProfileModel.findById(id),
+        );
       throw new NotFoundException('الطالب غير موجود');
     }
 
@@ -440,8 +457,15 @@ export class StudentsService {
       throw new NotFoundException('Ø§Ù„Ø·Ø§Ù„Ø¨ ØºÙŠØ± Ù…ÙˆØ¬ÙˆØ¯');
     }
 
-    profile.enrollmentStatus = 'active';
-    await profile.save();
+    assertEnrollmentCanBeActivated(profile);
+    const activated = await this.studentProfileModel.updateOne(
+      { _id: id, officialEnrollmentStatus: { $ne: 'CANCELLED' } },
+      { $set: { enrollmentStatus: 'active' } },
+    );
+    if (!activated.matchedCount)
+      throw new ConflictException(
+        'The enrollment changed. Refresh before activating.',
+      );
     await this.usersService.activateUser(profile.userId.toString());
     this.invalidateStatsCache();
 
@@ -1164,6 +1188,8 @@ export class StudentsService {
         academicYear: profile.academicYear,
         semester: profile.semester,
         enrollmentStatus: profile.enrollmentStatus,
+        officialEnrollmentStatus: profile.officialEnrollmentStatus,
+        ministryStatus: profile.ministryStatus,
       },
     };
   }

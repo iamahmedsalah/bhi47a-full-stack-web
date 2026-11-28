@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/data-table-shell";
 import { TableCell } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
+import { AcademicYearSelect, useAcademicYearOptions } from "@/components/ui/academic-year-select";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -84,13 +85,14 @@ export function ControlReleasePanel({ locale }: { locale: string }) {
   const canPublish =
     user?.role === "admin" ||
     Boolean(user?.permissions?.includes("grades.publish"));
-  const [year, setYear] = useState(
-    searchParams.get("releaseYear") || "2026-2027",
-  );
-  const [semester, setSemester] = useState<Semester>(() => {
+  const years = useAcademicYearOptions();
+  const [selectedYear, setYear] = useState(searchParams.get("releaseYear") ?? "");
+  const [selectedSemester, setSemester] = useState<Semester | undefined>(() => {
     const value = searchParams.get("releaseSemester");
-    return value === "second" || value === "summer" ? value : "first";
+    return value === "first" || value === "second" || value === "summer" ? value : undefined;
   });
+  const year = selectedYear || years.data?.currentYear || "";
+  const semester = selectedSemester ?? years.data?.currentSemester ?? "first";
   const [courseId, setCourseId] = useState(
     searchParams.get("releaseCourse") || "",
   );
@@ -238,19 +240,15 @@ export function ControlReleasePanel({ locale }: { locale: string }) {
         </ol>
       </HelpNote>
       <div className="grid items-end gap-2 sm:grid-cols-4 [&_input]:h-9 [&_button[aria-haspopup=listbox]]:h-9">
-        <Label className="block space-y-1 text-xs">
-          {t("year")}
-          <Input
-            aria-label={t("year")}
-            dir="ltr"
-            value={year}
-            disabled={busy}
-            onChange={(e) => {
-              setYear(e.target.value);
-              reset();
-            }}
-          />
-        </Label>
+        <AcademicYearSelect
+          label={t("year")}
+          value={year}
+          disabled={busy}
+          onChange={(value) => {
+            setYear(value);
+            reset();
+          }}
+        />
         <Select
           value={semester}
           disabled={busy}
@@ -522,6 +520,7 @@ export function ControlReleasePanel({ locale }: { locale: string }) {
               void queryClient.invalidateQueries({
                 queryKey: ["release-courses"],
               });
+              void queryClient.invalidateQueries({ queryKey: ["control", "dashboard"] });
               void queryClient.invalidateQueries({
                 queryKey: ["student-results"],
               });
@@ -620,6 +619,7 @@ export function ControlReleasePanel({ locale }: { locale: string }) {
             setConfirmWithdrawal(false);
             toast.success(t("withdrawn"));
             void queryClient.invalidateQueries({ queryKey: ["admin-grades"] });
+            void queryClient.invalidateQueries({ queryKey: ["control", "dashboard"] });
           })
         }
       />

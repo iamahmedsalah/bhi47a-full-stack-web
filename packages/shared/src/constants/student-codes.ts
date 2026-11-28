@@ -51,6 +51,7 @@ export type StudentCodeFindingReason =
   | "PREVIOUS_OWNER_BLOCKED"
   | "RESERVATION_HELD";
 export interface StudentCodeFinding {
+  permanent?: boolean;
   provenance?: { source: string; sourceFile?: string; rowNumber?: number; verification: string };
   studentCode: string;
   sequence?: number;
@@ -74,6 +75,7 @@ export interface StudentCodeYearItem {
   initializedAt: string;
 }
 export interface StudentCodeAuditResult {
+  nextReservationCode?: string;
   academicYear: string;
   yearPrefix: string;
   scannedAt: string;

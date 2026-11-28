@@ -338,6 +338,32 @@ describe('Student-code registry on the isolated replica set', () => {
     expect((await allocate(input)).studentCode).toBe(code);
     await expect(recover(input, 1)).rejects.toThrow();
   });
+  it('reserves a fresh next code once, skips it on approval and recovers it', async () => {
+    const input = await year();
+    await initialize(input);
+    const snapshot = await preview(input);
+    const code = formatStudentCode(input.yearPrefix, 1);
+    expect(snapshot.nextReservationCode).toBe(code);
+    expect(snapshot.items).toHaveLength(0);
+    const dto = {
+      ...input,
+      fingerprint: snapshot.fingerprint,
+      confirmed: true as const,
+      reason: 'Reserve the next synthetic code',
+    };
+    const holds = await Promise.allSettled([
+      service.holdPreviousOwner(code, dto, String(actor)),
+      service.holdPreviousOwner(code, dto, String(actor)),
+    ]);
+    expect(
+      holds.filter((result) => result.status === 'fulfilled'),
+    ).toHaveLength(1);
+    expect((await allocate(input)).studentCode).toBe(
+      formatStudentCode(input.yearPrefix, 2),
+    );
+    await recover(input, 1);
+    expect((await allocate(input)).studentCode).toBe(code);
+  });
   it('deletes an imported identity while preserving code ownership, academic records and import history', async () => {
     const input = await year();
     const code = formatStudentCode(input.yearPrefix, 1);

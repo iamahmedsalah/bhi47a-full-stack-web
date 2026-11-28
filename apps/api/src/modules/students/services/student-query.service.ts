@@ -175,7 +175,17 @@ export class StudentQueryService {
           ? query.status
           : undefined;
 
-    if (effectiveStatus) {
+    if (effectiveStatus === 'official')
+      filter.officialEnrollmentStatus = 'ENROLLED';
+    else if (effectiveStatus === 'provisional')
+      filter.officialEnrollmentStatus = 'PROVISIONAL';
+    else if (effectiveStatus === 'ministry-archived') {
+      filter.officialEnrollmentStatus = 'CANCELLED';
+      filter.ministryStatus = 'REJECTED';
+    } else if (effectiveStatus === 'unverified') {
+      filter.officialEnrollmentStatus = { $exists: false };
+      filter.enrollmentStatus = 'active';
+    } else if (effectiveStatus) {
       filter.enrollmentStatus = effectiveStatus;
     }
 
@@ -215,6 +225,7 @@ export class StudentQueryService {
       doctorStudentUserIds = await this.getDoctorStudentUserIds(caller._id);
     }
     const filter = this.buildFilter(query, doctorStudentUserIds);
+    this.restrictArchived(filter, caller);
     let sortField = 'studentCode';
     if (query.sortBy === 'createdAt') sortField = 'createdAt';
     else if (query.sortBy === 'fullName' || query.sortBy === 'name')
@@ -227,7 +238,7 @@ export class StudentQueryService {
       .find(filter)
       .read('secondaryPreferred')
       .select(
-        'studentCode fullName fullNameAr fullNameEn level department academicEmail enrollmentStatus group section seatNumber examRoom',
+        'studentCode fullName fullNameAr fullNameEn level department academicEmail enrollmentStatus officialEnrollmentStatus ministryStatus group section seatNumber examRoom',
       )
       .sort({ [sortField]: sortDir })
       .lean()
@@ -253,6 +264,7 @@ export class StudentQueryService {
     }
 
     const filter = this.buildFilter(query, doctorStudentUserIds);
+    this.restrictArchived(filter, caller);
 
     let sortField = 'createdAt';
     if (query.sortBy === 'studentCode') sortField = 'studentCode';
@@ -340,7 +352,10 @@ export class StudentQueryService {
         .lean();
     }
 
-    if (!profile) {
+    if (
+      !profile ||
+      (profile.ministryStatus === 'REJECTED' && !this.canViewArchived(caller))
+    ) {
       throw new NotFoundException('الطالب غير موجود');
     }
 
@@ -382,6 +397,25 @@ export class StudentQueryService {
       canViewNationalId,
     );
     return enriched;
+  }
+
+  private canViewArchived(caller?: AuthenticatedUser) {
+    return (
+      !caller ||
+      caller.role === 'admin' ||
+      caller.permissions.includes(PERMISSIONS.ADMISSIONS_ARCHIVE_READ)
+    );
+  }
+
+  private restrictArchived(
+    filter: FilterQuery<StudentProfileDocument>,
+    caller?: AuthenticatedUser,
+  ) {
+    if (!this.canViewArchived(caller))
+      filter.$and = [
+        ...(filter.$and ?? []),
+        { ministryStatus: { $ne: 'REJECTED' } },
+      ];
   }
 
   private getProfileUserId(

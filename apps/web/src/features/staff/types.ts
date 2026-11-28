@@ -44,6 +44,7 @@ export interface StaffListParams {
 
 export interface StaffProfileInput {
   courseIds?: string[];
+  gradeEntryCourseIds?: string[];
   permissions?: Permission[];
   name: string;
   nameAr?: string;

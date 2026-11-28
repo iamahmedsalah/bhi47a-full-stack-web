@@ -44,6 +44,9 @@ export class AdmissionPeriod {
   @Prop({ default: false })
   isEnabled!: boolean;
 
+  @Prop({ default: false })
+  lifecycleEnabled?: boolean;
+
   @Prop({ default: 0, min: 0 })
   revision!: number;
   @Prop({ default: 0 }) accessRevision!: number;

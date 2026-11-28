@@ -70,6 +70,19 @@ export class StaffManagementController {
     return this.staff.listFormCourses(query, id);
   }
 
+  @Get(':id/grade-entry-courses')
+  @RequireAnyPermissions(
+    PERMISSIONS.STAFF_READ,
+    PERMISSIONS.STAFF_CREATE_ACADEMIC,
+  )
+  @ApiOperation({
+    summary:
+      'List course IDs authorized for Control grade entry for a staff member',
+  })
+  gradeEntryCourses(@Param('id', ParseObjectIdPipe) id: string) {
+    return this.staff.listGradeEntryCourseIds(id);
+  }
+
   @Get(':id')
   @RequireAnyPermissions(
     PERMISSIONS.STAFF_READ,

@@ -6,12 +6,13 @@ import Image from "next/image";
 import { useQuery } from "@tanstack/react-query";
 import { BookOpen, ChevronRight, FileText, Layers, Lock, Search } from "lucide-react";
 import { courseCurriculumSummary, formatStaffDisplayName } from "@student-portal/shared";
-import api, { apiBaseUrl } from "@/lib/api";
+import api from "@/lib/api";
 import { normalizeSearchText } from "@/lib/search-text";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ErrorState, LoadingState } from "@/components/ui/feedback";
 import { CourseMaterialsDialog } from "./course-materials-dialog";
+import { CourseSyllabusPreviewDialog } from "./course-syllabus-preview-dialog";
 
 interface CatalogCourse {
   _id?: string;
@@ -24,6 +25,9 @@ interface CatalogCourse {
   creditHours?: number;
   coverImageUrl?: string;
   syllabusPdfUrl?: string;
+  syllabusPdfName?: string;
+  syllabusUpdatedAt?: string;
+  syllabusFileAvailable?: boolean;
   isRegistered?: boolean;
   doctorName?: string;
   doctorNameAr?: string;
@@ -46,6 +50,7 @@ export function StudentCourseCatalog({
   const [search, setSearch] = useState("");
   const [scope, setScope] = useState<"all" | "registered">("all");
   const [selected, setSelected] = useState<CatalogCourse | null>(null);
+  const [syllabusCourse, setSyllabusCourse] = useState<CatalogCourse | null>(null);
   const query = useQuery({
     queryKey: ["student-syllabi"],
     queryFn: async () => (await api.get<CatalogData>("/students/me/syllabi")).data,
@@ -261,32 +266,29 @@ export function StudentCourseCatalog({
                     <Layers aria-hidden="true" />
                     {ar ? "المحاضرات والسكاشن" : "Lectures & sections"}
                   </Button>
-                  {course.syllabusPdfUrl && !blocked ? (
+                  {course.syllabusPdfUrl && course.syllabusFileAvailable !== false && !blocked ? (
                     <Button
-                      asChild
+                      type="button"
                       variant="outline"
-                      className="h-auto min-h-9 rounded-squircle whitespace-normal px-2.5 py-1.5 text-xs font-semibold"
+                      onClick={() => setSyllabusCourse(course)}
+                      className="h-auto min-h-9 rounded-squircle whitespace-normal px-2.5 py-1.5 text-xs font-semibold cursor-pointer"
                     >
-                      <a
-                        href={
-                          course._id
-                            ? `${apiBaseUrl}/courses/${course._id}/syllabus/download`
-                            : course.syllabusPdfUrl
-                        }
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <FileText aria-hidden="true" />
-                        {ar ? "منهج PDF" : "Syllabus PDF"}
-                      </a>
+                      <FileText aria-hidden="true" />
+                      {ar ? "منهج PDF" : "Syllabus PDF"}
                     </Button>
                   ) : (
                     <span className="flex min-h-9 items-center justify-center gap-1.5 rounded-squircle border border-border/50 bg-muted/40 px-2.5 py-1.5 text-center text-xs text-muted-foreground">
-                      {course.syllabusPdfUrl ? (
+                      {course.syllabusPdfUrl && blocked ? (
                         <>
                           <Lock className="size-3.5 shrink-0" aria-hidden="true" />
                           {ar ? "المنهج محجوب" : "Syllabus locked"}
                         </>
+                      ) : course.syllabusPdfUrl && course.syllabusFileAvailable === false ? (
+                        ar ? (
+                          "المنهج غير متوفر حالياً"
+                        ) : (
+                          "Syllabus unavailable"
+                        )
                       ) : ar ? (
                         "المنهج قيد الإعداد"
                       ) : (
@@ -325,6 +327,20 @@ export function StudentCourseCatalog({
           locale={locale}
           isStudent
           isStudentBlocked={blocked}
+        />
+      )}
+      {syllabusCourse && (
+        <CourseSyllabusPreviewDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setSyllabusCourse(null);
+          }}
+          courseId={syllabusCourse._id || syllabusCourse.courseId || ""}
+          courseCode={syllabusCourse.code}
+          courseName={name(syllabusCourse)}
+          fileName={syllabusCourse.syllabusPdfName}
+          updatedAt={syllabusCourse.syllabusUpdatedAt}
+          locale={locale}
         />
       )}
     </section>

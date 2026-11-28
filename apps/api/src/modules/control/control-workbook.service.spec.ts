@@ -133,6 +133,7 @@ function build(component: 'midterm' | 'coursework' | 'final' = 'midterm') {
     },
   };
   const access = {
+    assertCourseGradeWrite: jest.fn(),
     assertPermission: jest.fn(),
     getCapabilities: () => ({ canManageStates: false }),
   };

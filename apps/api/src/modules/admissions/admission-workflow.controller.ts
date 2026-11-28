@@ -24,6 +24,7 @@ import {
 } from '../auth/decorators/permissions.decorator';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request';
 import { AdmissionWorkflowService } from './admission-workflow.service';
+import { RegistrationTermService } from '../registrations/services/registration-term.service';
 import {
   AdmissionSpreadsheets,
   type AdmissionWorkbookFile,
@@ -37,6 +38,7 @@ import {
   DecisionDto,
   PublicAccessDto,
   PublicApplicantDto,
+  PublicCorrectionDto,
   PublicStatusDto,
   UpdateAdmissionGroupDto,
   UpdateApplicantDto,
@@ -58,6 +60,12 @@ export class PublicAdmissionsController {
   @Post('status') status(@Body() dto: PublicStatusDto) {
     return this.admissions.publicStatus(dto);
   }
+  @Post('correction') resubmit(
+    @Body() dto: PublicCorrectionDto,
+    @Req() req: Request,
+  ) {
+    return this.admissions.resubmitCorrection(dto, req.ip);
+  }
 }
 
 @Controller('admin/admissions')
@@ -66,6 +74,7 @@ export class AdmissionWorkflowController {
   constructor(
     private readonly admissions: AdmissionWorkflowService,
     private readonly sheets: AdmissionSpreadsheets,
+    private readonly registrationTerms: RegistrationTermService,
   ) {}
   @Get('academic-years')
   @RequireAnyPermissions(
@@ -73,9 +82,21 @@ export class AdmissionWorkflowController {
     PERMISSIONS.ADMISSIONS_REQUESTS_READ,
     PERMISSIONS.ADMISSIONS_ACCESS_MANAGE,
     PERMISSIONS.STUDENT_CODES_READ,
+    PERMISSIONS.ADMISSIONS_POLICY_MANAGE,
+    PERMISSIONS.ADMISSIONS_PERIODS_MANAGE,
   )
-  academicYears() {
-    return this.admissions.academicYears();
+  async academicYears() {
+    const [managed, historical] = await Promise.all([
+      this.registrationTerms.academicYearOptions(),
+      this.admissions.academicYears(),
+    ]);
+    return {
+      ...managed,
+      managedYears: managed.items,
+      items: [...new Set([...managed.items, ...historical.items])]
+        .sort()
+        .reverse(),
+    };
   }
   @Get('requests')
   @RequirePermissions(PERMISSIONS.ADMISSIONS_REQUESTS_READ)
@@ -135,6 +156,18 @@ export class AdmissionWorkflowController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.admissions.decide(id, 'REJECTED', dto, actor);
+  }
+  @Post('requests/:id/request-correction')
+  @RequirePermissions(
+    PERMISSIONS.ADMISSIONS_REQUESTS_READ,
+    PERMISSIONS.ADMISSIONS_REQUESTS_UPDATE,
+  )
+  correction(
+    @Param('id') id: string,
+    @Body() dto: DecisionDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.admissions.requestCorrection(id, dto, actor);
   }
   @Post('requests/:id/waitlist')
   @RequirePermissions(
@@ -263,10 +296,14 @@ export class AdmissionWorkflowController {
     PERMISSIONS.ADMISSIONS_REQUESTS_READ,
     PERMISSIONS.ADMISSIONS_EXPORT,
   )
-  async export(@Query() query: AdmissionListDto, @Res() res: Response) {
+  async export(
+    @Query() query: AdmissionListDto,
+    @Res() res: Response,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
     this.sendWorkbook(
       res,
-      await this.sheets.workbook(query),
+      await this.sheets.workbook(query, false, actor),
       'admission-requests.xlsx',
     );
   }

@@ -125,19 +125,31 @@ async function main() {
   let materials = [];
   const server = http.createServer(async (req, res) => {
     const pathname = new URL(req.url, "http://localhost").pathname;
-    const json = (data, status = 200) => {
+    const json = (data, status = 200, message = "Synthetic upload failure") => {
       res.writeHead(status, { "Content-Type": "application/json" });
       res.end(
         JSON.stringify({
           success: status < 400,
           data,
           ...(status >= 400
-            ? { message: "Synthetic upload failure", statusCode: status }
+            ? { message, statusCode: status }
             : {}),
         }),
       );
     };
     if (pathname.startsWith("/api/")) {
+      if (req.method === "PATCH" && pathname.startsWith("/api/courses/materials/")) {
+        const item = materials.find(({ _id }) => _id === pathname.split("/").at(-1));
+        if (!item) {
+          json(null, 404);
+          return;
+        }
+        const chunks = [];
+        for await (const chunk of req) chunks.push(chunk);
+        Object.assign(item, JSON.parse(Buffer.concat(chunks).toString("utf8")));
+        json({ material: item });
+        return;
+      }
       if (req.method === "POST") {
         posts++;
         active++;
@@ -198,6 +210,8 @@ async function main() {
                   fileUrl: "/api/test.pdf",
                   isPublished: true,
                   uploadedByName: "Tester",
+                  uploadedByRole: "doctor",
+                  canEdit: true,
                   createdAt: new Date().toISOString(),
                 });
               json({});
@@ -205,17 +219,81 @@ async function main() {
             release();
           }, 1200);
         });
+      } else if (pathname === "/api/courses/materials/preview-regression/download") {
+        const item = materials.find(({ _id }) => _id === "preview-regression");
+        res.writeHead(200, { "Content-Type": "application/pdf" });
+        res.end(`%PDF-1.4\n% ${item.updatedAt}\n`);
+      } else if (
+        pathname.startsWith("/api/courses/materials/") &&
+        pathname.endsWith("/preview")
+      ) {
+        const materialId = pathname.split("/").at(-2);
+        const item = materials.find(({ _id }) => _id === materialId);
+        if (materialId === "preview-regression") {
+          if (item.previewUnavailable) {
+            json(null, 404, `Cannot GET ${pathname}`);
+            return;
+          }
+          json({
+            materialId,
+            title: item.title,
+            fileName: item.fileName,
+            mimeType: "application/pdf",
+            kind: "pdf",
+          });
+          return;
+        }
+        json({
+          materialId: materialId || "combined",
+          title: item?.title || "Lecture 1",
+          fileName: item?.fileName || "lecture.pdf",
+          mimeType: item?.mimeType || "application/pdf",
+          kind: "pptx",
+          slideAspectRatio: 16 / 9,
+          totalSlides: 1,
+          slides: [
+            {
+              index: 1,
+              title: "سكشن الوراثة الجزء الثاني",
+              elements: [
+                {
+                  kind: "text",
+                  x: 8,
+                  y: 12,
+                  w: 84,
+                  h: 20,
+                  isPlaceholderTitle: true,
+                  paragraphs: [
+                    {
+                      dir: "rtl",
+                      align: "center",
+                      isTitle: true,
+                      runs: [{ text: "سكشن الوراثة الجزء الثاني", bold: true }],
+                    },
+                  ],
+                },
+              ],
+              outline: [
+                {
+                  dir: "rtl",
+                  isTitle: true,
+                  runs: [{ text: "سكشن الوراثة الجزء الثاني", bold: true }],
+                },
+              ],
+            },
+          ],
+        });
       } else if (pathname.endsWith("/materials")) {
         const viewer = new URL(req.headers.referer ?? "/", "http://localhost").searchParams;
         const role = viewer.get("role") ?? "admin";
         const kind = viewer.get("staffType");
         let allowedUploadTypes = [];
         if (!viewer.has("readonly") && !viewer.has("unassigned")) {
-          if (role === "admin" || (role === "staff" && kind === "assistant_lecturer")) {
+          if (role === "admin") {
             allowedUploadTypes = ["lecture", "section"];
           } else if (role === "staff" && kind === "doctor") {
             allowedUploadTypes = ["lecture"];
-          } else if (role === "staff" && kind === "teaching_assistant") {
+          } else if (role === "staff" && ["teaching_assistant", "assistant_lecturer"].includes(kind)) {
             allowedUploadTypes = ["section"];
           }
         }
@@ -331,6 +409,14 @@ async function main() {
       );
       assert.equal(await watch.getAttribute("target"), "_blank");
       assert.match(await watch.getAttribute("rel"), /noopener/);
+      await page
+        .getByRole("button", { name: isAr ? "تعديل المحتوى" : "Edit Material", exact: true })
+        .click();
+      await page.locator("input[type=text]").first().fill("Updated recording");
+      await page
+        .getByRole("button", { name: isAr ? "حفظ التعديلات" : "Save Changes", exact: true })
+        .click();
+      await page.getByText("Updated recording", { exact: true }).waitFor();
       await page.screenshot({
         path: path.join(output, `${locale}-recording-list.png`),
         fullPage: true,
@@ -446,8 +532,8 @@ async function main() {
         .getByRole("button", { name: "Open materials", exact: true })
         .click();
       const combinedRow = page
-        .getByText("lecture", { exact: true })
-        .locator("xpath=../../../..");
+        .getByRole("listitem")
+        .filter({ has: page.getByText("lecture", { exact: true }) });
       await combinedRow
         .getByRole("link", {
           name: isAr ? "مشاهدة التسجيل" : "Watch recording",
@@ -463,6 +549,16 @@ async function main() {
           .count(),
         1,
       );
+      await combinedRow
+        .getByRole("button", { name: isAr ? "معاينة" : "Preview", exact: true })
+        .waitFor();
+      assert.ok(await combinedRow.evaluate((row) => {
+        const bounds = row.getBoundingClientRect();
+        return [...row.querySelectorAll("a, button")].every((action) => {
+          const { left, right } = action.getBoundingClientRect();
+          return left >= bounds.left && right <= bounds.right;
+        });
+      }), "all material actions fit inside the row");
       await page.screenshot({
         path: path.join(output, `${locale}-combined-material.png`),
         fullPage: true,
@@ -531,7 +627,7 @@ async function main() {
           .getByRole("button", { name: "Open materials", exact: true })
           .click();
         const add = page.getByRole("button", {
-          name: staffType === "doctor" ? "Add New Lecture" : staffType === "assistant_lecturer" ? "Add Material" : "Add New Section",
+          name: staffType === "doctor" ? "Add New Lecture" : "Add New Section",
           exact: true,
         });
         if (readonly) {
@@ -540,9 +636,8 @@ async function main() {
         }
         if (!readonly) {
           await add.click();
-          if (staffType === "assistant_lecturer") {
-            await page.getByRole("button", { name: "Lecture", exact: true }).waitFor();
-            await page.getByRole("button", { name: "Section", exact: true }).click();
+          if (staffType !== "doctor") {
+            assert.equal(await page.getByRole("button", { name: "Lecture", exact: true }).count(), 0);
           }
           await page
             .getByLabel("Lecture or section video URL (optional)", {
@@ -553,6 +648,66 @@ async function main() {
         await page.close();
       }
     }
+    const pdf = {
+      _id: "preview-regression",
+      courseId,
+      title: "Regression PDF",
+      type: "lecture",
+      hasFile: true,
+      fileAvailable: true,
+      canEdit: true,
+      fileName: "unchanged-name.pdf",
+      mimeType: "application/pdf",
+      updatedAt: "2026-11-28T09:00:00.000Z",
+    };
+    materials = [pdf];
+    const previewPage = await browser.newPage({ acceptDownloads: true });
+    await previewPage.goto(`http://127.0.0.1:${server.address().port}/?locale=en`);
+    const openMaterials = previewPage.getByRole("button", { name: "Open materials", exact: true });
+    const openPreview = previewPage.getByRole("button", { name: "Preview", exact: true });
+    const pdfFrame = previewPage.locator('iframe[title="unchanged-name.pdf"]');
+    const readPreview = async () => {
+      await pdfFrame.waitFor();
+      return pdfFrame.evaluate(async (frame) => (await fetch(frame.src)).text());
+    };
+    const closeDialogs = async () => {
+      await previewPage.keyboard.press("Escape");
+      await openPreview.waitFor();
+      await previewPage.keyboard.press("Escape");
+      await openPreview.waitFor({ state: "hidden" });
+    };
+    await openMaterials.click();
+    await openPreview.click();
+    assert.match(await readPreview(), /09:00:00/);
+    await closeDialogs();
+    pdf.updatedAt = "2026-11-28T10:00:00.000Z";
+    pdf.description = "The file was replaced";
+    await openMaterials.click();
+    await previewPage.getByText(pdf.description, { exact: true }).waitFor();
+    await openPreview.click();
+    assert.match(await readPreview(), /10:00:00/);
+    await closeDialogs();
+    pdf.previewUnavailable = true;
+    pdf.updatedAt = "2026-11-28T11:00:00.000Z";
+    pdf.description = "The preview route is unavailable";
+    await openMaterials.click();
+    await previewPage.getByText(pdf.description, { exact: true }).waitFor();
+    await openPreview.click();
+    await previewPage.getByText("Preview is currently unavailable. You can try downloading the file directly.").waitFor();
+    const downloading = previewPage.waitForEvent("download");
+    await previewPage.getByRole("button", { name: "Download file instead", exact: true }).click();
+    const downloaded = await downloading;
+    assert.equal(downloaded.suggestedFilename(), pdf.fileName);
+    assert.match(await fs.readFile(await downloaded.path(), "utf8"), /11:00:00/);
+    await closeDialogs();
+    pdf.fileAvailable = false;
+    await openMaterials.click();
+    await previewPage.getByText("File missing on server", { exact: true }).waitFor();
+    assert.equal(await openPreview.isDisabled(), true);
+    assert.equal(await previewPage.getByRole("button", { name: "Download", exact: true }).isDisabled(), true);
+    await previewPage.getByRole("button", { name: "Re-upload", exact: true }).waitFor();
+    await previewPage.close();
+
     for (const locale of ["en", "ar"]) {
       const page = await browser.newPage({ viewport: { width: 360, height: 800 } });
       await page.goto(`http://127.0.0.1:${server.address().port}/?locale=${locale}&role=student&studentHeader=1`);
@@ -597,9 +752,20 @@ async function main() {
         .click();
       await page.getByText("Lecture 1", { exact: true }).waitFor();
       assert.equal(
+        await page.getByRole("button", { name: "معاينة", exact: true }).count(),
+        blocked ? 0 : 1,
+      );
+      assert.equal(
         await page.getByRole("button", { name: "تحميل", exact: true }).count(),
         blocked ? 0 : 1,
       );
+      if (!blocked) {
+        await page.getByRole("button", { name: "معاينة", exact: true }).click();
+        await page
+          .getByText("سكشن الوراثة الجزء الثاني", { exact: true })
+          .waitFor();
+        await page.keyboard.press("Escape");
+      }
       assert.equal(
         await page
           .getByRole("link", { name: "مشاهدة التسجيل", exact: true })
@@ -631,7 +797,7 @@ async function main() {
       "Closing dialogs and navigating never aborts uploads",
     );
     console.log(
-      "English/Arabic desktop/mobile: dialog close, navigation, actual upload percentages, notification bell/drawer, queued books, saving acknowledgement, explicit retry and cancellation passed.",
+      "English/Arabic desktop/mobile: uploads, PDF preview, refreshed replacement, older API download fallback, missing-file states and student restrictions passed.",
     );
   } finally {
     await browser?.close();

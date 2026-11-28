@@ -30,6 +30,7 @@ const AssignmentSchema = SchemaFactory.createForClass(CodeAssignment);
 @Schema({ collection: 'student_code_registry', timestamps: true })
 export class StudentCodeEntry {
   @Prop({ default: false }) reuseAuthorized?: boolean;
+  @Prop({ type: Date }) protectedAt?: Date;
   @Prop({ required: true, immutable: true }) studentCode!: string;
   @Prop({ required: true }) academicYear!: string;
   @Prop({ required: true, immutable: true }) yearPrefix!: string;

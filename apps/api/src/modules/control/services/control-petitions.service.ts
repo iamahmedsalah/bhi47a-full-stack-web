@@ -87,6 +87,7 @@ export class ControlPetitionsService {
       user,
       dto.sheetId,
     );
+    await this.access.assertCourseGradeWrite(user, sheet.courseId);
     const [scheme, rules] = await Promise.all([
       this.schemes.getScheme(
         String(sheet.courseId),
@@ -362,7 +363,8 @@ export class ControlPetitionsService {
       };
     }
 
-    const termFilter: Record<string, unknown> = {};
+    const scope = await this.access.petitionScope(user, query ?? {});
+    const termFilter: Record<string, unknown> = { ...scope };
     if (query?.academicYear) termFilter.academicYear = query.academicYear;
     if (query?.semester) termFilter.semester = query.semester;
 
@@ -400,6 +402,7 @@ export class ControlPetitionsService {
           : Promise.resolve(0),
         resolvedSheetObjectId
           ? this.petitionModel.countDocuments({
+              ...scope,
               sheetId: resolvedSheetObjectId,
               status: 'PENDING',
             })
@@ -429,6 +432,8 @@ export class ControlPetitionsService {
     }
 
     const filter: Record<string, unknown> = {};
+    const scope = await this.access.petitionScope(user, query);
+    if (Object.keys(scope).length) filter.$and = [scope];
     if (query.academicYear) filter.academicYear = query.academicYear;
     if (query.semester) filter.semester = query.semester;
     if (query.component) filter.component = query.component;
@@ -522,6 +527,14 @@ export class ControlPetitionsService {
 
     const doc = await this.petitionModel.findById(id).lean();
     if (!doc) throw new NotFoundException('Petition not found');
+    if (
+      !caps.scopeAll &&
+      !caps.canApprovePetitions &&
+      String(doc.requestedBy) !== user._id
+    ) {
+      throw new ForbiddenException('Petition is outside your assigned scope');
+    }
+    await this.assertPetitionScope(user, doc);
 
     const actorIds = [String(doc.requestedBy)];
     if (doc.reviewedBy) actorIds.push(String(doc.reviewedBy));
@@ -562,6 +575,7 @@ export class ControlPetitionsService {
 
     const target = await this.petitionModel.findById(id).lean();
     if (!target) throw new NotFoundException('Petition not found');
+    await this.assertPetitionScope(user, target);
     if (target.status !== 'PENDING') {
       throw new ConflictException('تم البت في طلب الالتماس هذا مسبقًا');
     }
@@ -922,6 +936,8 @@ export class ControlPetitionsService {
     ) {
       throw new ForbiddenException('Only the requester may mark this as seen');
     }
+    this.access.assertPermission(user, PERMISSIONS.CONTROL_ACCESS);
+    await this.assertPetitionScope(user, petition);
 
     await this.petitionModel.updateOne(
       { _id: petition._id },
@@ -929,6 +945,19 @@ export class ControlPetitionsService {
     );
 
     return this.getPetition(user, id);
+  }
+
+  private async assertPetitionScope(
+    user: AuthenticatedUser,
+    petition: Pick<ControlPetition, 'courseId' | 'academicYear' | 'semester'>,
+  ) {
+    if (this.access.getCapabilities(user).scopeAll) return;
+    await this.access.assertCourseIdScope(
+      user,
+      String(petition.courseId),
+      petition.academicYear,
+      petition.semester,
+    );
   }
 
   private serializePetition(

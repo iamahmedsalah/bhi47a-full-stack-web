@@ -51,13 +51,19 @@ await write('styles.css', css.css);
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
-    if (url.pathname === '/admin/admissions/academic-years') { res.setHeader('Content-Type','application/json');res.end(JSON.stringify({items:[fixture.academicYear]}));return; }
+    if (url.pathname === '/admin/admissions/academic-years') {
+      const managedYears = ['2027-2028', fixture.academicYear, '2025-2026'];
+      res.setHeader('Content-Type','application/json');
+      res.end(JSON.stringify({ items: [...managedYears, '2024-2025'], managedYears, currentYear: null }));
+      return;
+    }
     if (url.pathname.startsWith('/admin/student-codes')) {
       res.setHeader('Content-Type','application/json');
       if (url.pathname.endsWith('/audit')) {
         const summary={AVAILABLE:0,RESERVED:0,ASSIGNED:0,RELEASED:0,REQUIRES_REVIEW:0,MISSING:0};for(const row of codeRows)summary[row.status]++;
         const rows=codeRows.filter(row=>(!url.searchParams.get('status')||row.status===url.searchParams.get('status'))&&(!url.searchParams.get('search')||row.studentCode.includes(url.searchParams.get('search'))));
-        res.end(JSON.stringify({academicYear:'2026-2027',yearPrefix:'27',scannedAt:'2026-11-01T08:00:00Z',fingerprint:String.fromCharCode(97+codeVersion).repeat(64),policy:codeReady?{academicYear:'2026-2027',yearPrefix:'27',nextSequence:4,initializedAt:'2026-11-01T08:00:00Z'}:null,canInitialize:!codeReady,mappingConflict:false,reuseEnabled:false,truncated:false,summary,items:rows,total:rows.length,page:1,limit:20,totalPages:1}));return;
+        const nextReservationCode=codeReady?codeRows.find(row=>row.status==='AVAILABLE')?.studentCode ?? (codeRows.some(row=>row.studentCode==='270004')?'270005':'270004'):undefined;
+        res.end(JSON.stringify({academicYear:'2026-2027',yearPrefix:'27',scannedAt:'2026-11-01T08:00:00Z',fingerprint:String.fromCharCode(97+codeVersion).repeat(64),policy:codeReady?{academicYear:'2026-2027',yearPrefix:'27',nextSequence:4,initializedAt:'2026-11-01T08:00:00Z'}:null,nextReservationCode,canInitialize:!codeReady,mappingConflict:false,reuseEnabled:false,truncated:false,summary,items:rows,total:rows.length,page:1,limit:20,totalPages:1}));return;
       }
       if (url.pathname.endsWith('/history')) {
         if(denyHistory){res.statusCode=503;res.end(JSON.stringify({message:'unavailable'}));return;}
@@ -66,6 +72,7 @@ const server = http.createServer(async (req, res) => {
       const chunks=[];for await(const chunk of req)chunks.push(chunk);const body=JSON.parse(Buffer.concat(chunks).toString());codeWrites.push({path:url.pathname,body});
       if(codeFailure||body.fingerprint!==String.fromCharCode(97+codeVersion).repeat(64)){res.statusCode=409;res.end(JSON.stringify({code:codeFailure||'CODE_PREVIEW_CHANGED'}));return;}
       if(url.pathname.endsWith('/initialize'))codeReady=true;
+      else if(url.pathname.endsWith('/hold')){const code=url.pathname.split('/').at(-2);codeRows.push({studentCode:code,sequence:Number(code.slice(2)),status:'RESERVED',reason:'RESERVATION_HELD'});}
       else {const code=url.pathname.split('/').at(-2);codeRows=codeRows.map(row=>row.studentCode===code?{...row,status:'AVAILABLE',reason:'CONFIRMED_AVAILABLE'}:row);}
       codeVersion++;res.end(JSON.stringify({ok:true}));return;
     }
@@ -136,7 +143,10 @@ try {
     await page.clock.setFixedTime(new Date('2026-11-01T08:00:00Z'));
     await page.getByRole('button', { name: t.create, exact: true }).click();
     await dialog.getByLabel(t.fields.code, { exact: true }).fill('INTAKE27');
-    await dialog.getByLabel(t.fields.academicYear, { exact: true }).fill('2027-2028');
+    await dialog.getByLabel(t.fields.academicYear, { exact: true }).click();
+    await page.getByRole('option', { name: '2025-2026', exact: true }).waitFor();
+    assert.equal(await page.getByRole('option', { name: '2024-2025', exact: true }).count(), 0);
+    await page.getByRole('option', { name: '2027-2028', exact: true }).click();
     await name.fill('New intake');
     const nowLabel = locale === 'ar' ? '\u062a\u0639\u064a\u064a\u0646 \u0627\u0644\u0622\u0646' : 'Set to Now';
     const doneLabel = locale === 'ar' ? '\u062a\u0645' : 'Done';
@@ -182,8 +192,17 @@ try {
     const prefix=page.getByLabel(t.fields.yearPrefix,{exact:true});
     assert.equal(await prefix.getAttribute('dir'),'ltr');
     assert.equal(await prefix.isEditable(),false);
+    const guide = page.getByRole('button', { name: t.auditGuide, exact: true });
+    assert.equal(await guide.getAttribute('aria-expanded'), 'false');
+    await guide.press('Enter');
+    await page.getByRole('note').getByText(t.workflowHelp, { exact: true }).waitFor();
+    await guide.press('Enter');
+    await page.getByRole('note').waitFor({ state: 'hidden' });
     await page.getByRole('button',{name:t.scan,exact:true}).click();
     await page.getByText(t.validation.year,{exact:true}).waitFor();
+    await page.getByRole('button',{name:yearLabel,exact:true}).click();
+    await page.getByRole('option',{name:'2024-2025',exact:true}).click();
+    assert.equal(await prefix.inputValue(),'25');
     await page.getByRole('button',{name:yearLabel,exact:true}).click();
     await page.getByRole('option',{name:'2026-2027',exact:true}).click();
     assert.equal(await prefix.inputValue(),'27');
@@ -195,10 +214,15 @@ try {
     const reason=dialog.getByLabel(t.fields.reason,{exact:true});await reason.fill('Reviewed synthetic identity inventory.');await dialog.getByRole('checkbox',{name:t.confirmed,exact:true}).check();
     codeFailure='CODE_PREVIEW_CHANGED';await submit.click();await dialog.getByRole('alert').getByText(t.errors.changed,{exact:true}).waitFor();assert.equal(await reason.inputValue(),'Reviewed synthetic identity inventory.');
     codeFailure=undefined;await dialog.getByRole('button',{name:t.refreshPreview,exact:true}).click();await dialog.getByRole('button',{name:t.refreshPreview,exact:true}).waitFor({state:'hidden'});await dialog.getByRole('checkbox',{name:t.confirmed,exact:true}).check();await submit.click();await dialog.waitFor({state:'hidden'});assert.equal(codeReady,true);
+    await page.getByRole('button',{name:t.holdNext,exact:true}).click();
+    await dialog.getByText('270004',{exact:true}).waitFor();
+    await reason.fill('Reserve a synthetic unused code.');await dialog.getByRole('checkbox',{name:t.confirmed,exact:true}).check();await submit.click();await dialog.waitFor({state:'hidden'});
+    assert.equal(codeWrites.at(-1).path,'/admin/student-codes/270004/hold');
+    await page.getByRole('row').filter({hasText:'270004'}).getByText(t.statuses.RESERVED,{exact:true}).waitFor();
     const actions=(code)=>page.getByRole('button',{name:t.actionsFor.replace('{code}',code),exact:true});
     await actions('270001').click();await page.getByRole('menuitem',{name:t.recover,exact:true}).click();
     await reason.fill('Verified never assigned in internal and external records.');await dialog.getByRole('checkbox',{name:t.confirmed,exact:true}).check();await submit.click();
-    await dialog.getByText(t.validation.attest,{exact:true}).waitFor();assert.equal(codeWrites.length,2);
+    await dialog.getByText(t.validation.attest,{exact:true}).waitFor();assert.equal(codeWrites.length,3);
     await dialog.getByRole('checkbox',{name:t.neverAssignedConfirmed,exact:true}).check();await submit.click();await dialog.waitFor({state:'hidden'});
     assert.equal(codeWrites.at(-1).body.neverAssignedConfirmed,true);
     await page.getByRole('row').filter({hasText:'270001'}).getByText(t.statuses.AVAILABLE,{exact:true}).waitFor();

@@ -11,6 +11,11 @@ describe('course materials storage boundaries', () => {
     _id: new Types.ObjectId(),
     role: 'staff',
     staffType: 'doctor',
+    permissions: [
+      PERMISSIONS.COURSES_WRITE,
+      PERMISSIONS.COURSE_MATERIALS_WRITE,
+      PERMISSIONS.COURSE_MATERIALS_DELETE,
+    ],
   };
   const ta = {
     _id: new Types.ObjectId(),
@@ -44,6 +49,8 @@ describe('course materials storage boundaries', () => {
       doctorId: doctor._id,
       teachingAssistantIds: [ta._id],
       syllabusPdfUrl: 'https://old.example/book.pdf',
+      syllabusUploadedBy: doctor._id,
+      get: jest.fn(),
       save: jest.fn().mockResolvedValue(undefined),
     };
     materials = jest.fn().mockImplementation((data) => ({
@@ -57,7 +64,7 @@ describe('course materials storage boundaries', () => {
         .fn()
         .mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
     });
-    materials.findByIdAndDelete = jest.fn();
+    materials.findOneAndDelete = jest.fn().mockResolvedValue({});
     materials.exists = jest.fn().mockResolvedValue(null);
     students = {
       findOne: jest.fn().mockReturnValue({
@@ -72,7 +79,11 @@ describe('course materials storage boundaries', () => {
     courseExists = jest.fn().mockResolvedValue(null);
     service = new CoursesService(
       {
-        findById: jest.fn().mockResolvedValue(course),
+        findById: jest.fn(() =>
+          Object.assign(Promise.resolve(course), {
+            select: jest.fn().mockResolvedValue(course),
+          }),
+        ),
         exists: courseExists,
       } as never,
       materials,
@@ -182,20 +193,10 @@ describe('course materials storage boundaries', () => {
         { type: 'lecture', title: 'Lecture' },
         caller,
       );
-      if (staffType === 'assistant_lecturer') {
-        await expect(lecture).resolves.toMatchObject({
-          material: { type: 'lecture' },
-        });
-      } else {
-        await expect(lecture).rejects.toThrow();
-      }
-      const types =
-        staffType === 'assistant_lecturer'
-          ? ['lecture', 'section']
-          : ['section'];
+      await expect(lecture).rejects.toThrow();
       await expect(
         service.getCourseMaterials(course._id.toString(), {}, caller),
-      ).resolves.toMatchObject({ allowedUploadTypes: types });
+      ).resolves.toMatchObject({ allowedUploadTypes: ['section'] });
       await expect(
         service.getCourseMaterials(
           course._id.toString(),
@@ -209,7 +210,7 @@ describe('course materials storage boundaries', () => {
           {},
           { ...caller, _id: new Types.ObjectId() },
         ),
-      ).resolves.toMatchObject({ allowedUploadTypes: [] });
+      ).rejects.toThrow();
       await expect(
         service.authorizeMaterialUpload(
           course._id.toString(),
@@ -259,7 +260,7 @@ describe('course materials storage boundaries', () => {
         { type: 'lecture', title: 'Lecture from assistant lecturer' },
         assistantLecturer,
       ),
-    ).resolves.toMatchObject({ material: { type: 'lecture' } });
+    ).rejects.toThrow();
   });
 
   it('preserves assignment and type permissions for recording links', async () => {
@@ -299,7 +300,33 @@ describe('course materials storage boundaries', () => {
     expect(course.syllabusFile).toEqual(stored);
     expect(course.syllabusPdfData).toBeUndefined();
     expect(course.syllabusPdfUrl).toContain('/syllabus/download');
+    expect(String(course.syllabusUploadedBy)).toBe(String(doctor._id));
     expect(storage.removeUncommitted).not.toHaveBeenCalled();
+  });
+
+  it('preserves the book owner during supervision and denies another assigned doctor', async () => {
+    const colleague = { ...doctor, _id: new Types.ObjectId() };
+    course.doctorIds = [doctor._id, colleague._id];
+    await expect(
+      service.uploadSyllabus(String(course._id), file, colleague),
+    ).rejects.toThrow();
+    expect(storage.save).not.toHaveBeenCalled();
+    course.contentSupervisorId = colleague._id;
+    await service.uploadSyllabus(String(course._id), file, colleague);
+    expect(String(course.syllabusUploadedBy)).toBe(String(doctor._id));
+    course.contentSupervisorId = undefined;
+    await expect(
+      service.uploadSyllabus(String(course._id), file, colleague),
+    ).rejects.toThrow();
+  });
+
+  it('allows an administrator to replace a legacy book with no known owner', async () => {
+    course.syllabusUploadedBy = undefined;
+    await expect(
+      service.uploadSyllabus(String(course._id), file, doctor),
+    ).rejects.toThrow();
+    await service.uploadSyllabus(String(course._id), file, admin);
+    expect(String(course.syllabusUploadedBy)).toBe(String(admin._id));
   });
 
   it('cleans the new book after a failed metadata write, preserving old disk files', async () => {
@@ -406,16 +433,175 @@ describe('course materials storage boundaries', () => {
   });
 
   it('prevents another uploader from deleting a material and retains bytes for backups', async () => {
+    const materialId = new Types.ObjectId();
     materials.findById.mockResolvedValue({
+      _id: materialId,
       uploadedBy: doctor._id,
       courseId: course._id,
       type: 'lecture',
       storedFile: stored,
+      get: jest.fn(),
     });
-    await expect(service.deleteCourseMaterial('id', ta)).rejects.toThrow();
-    expect(materials.findByIdAndDelete).not.toHaveBeenCalled();
-    await service.deleteCourseMaterial('id', doctor);
-    expect(materials.findByIdAndDelete).toHaveBeenCalledWith('id');
+    await expect(
+      service.deleteCourseMaterial(String(materialId), {
+        ...ta,
+        permissions: [PERMISSIONS.COURSE_MATERIALS_DELETE],
+      }),
+    ).rejects.toThrow();
+    expect(materials.findOneAndDelete).not.toHaveBeenCalled();
+    await service.deleteCourseMaterial(String(materialId), doctor);
+    expect(materials.findOneAndDelete).toHaveBeenCalledWith({
+      _id: materialId,
+      updatedAt: null,
+    });
     expect(storage.removeUncommitted).not.toHaveBeenCalled();
+  });
+
+  it('updates material attachments and metadata while preserving its uploader', async () => {
+    const material = {
+      _id: new Types.ObjectId(),
+      courseId: course._id,
+      uploadedBy: doctor._id,
+      title: 'Original lecture',
+      type: 'lecture',
+      storedFile: { ...stored, storageKey: 'files/original' },
+      weekNumber: 4,
+      get: jest.fn(),
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    materials.findById.mockResolvedValue(material);
+    await expect(
+      service.updateCourseMaterial(
+        String(material._id),
+        [file],
+        { title: 'Updated lecture', weekNumber: null },
+        {
+          ...ta,
+          permissions: [PERMISSIONS.COURSE_MATERIALS_WRITE],
+        },
+      ),
+    ).rejects.toThrow();
+    expect(storage.save).not.toHaveBeenCalled();
+    await service.updateCourseMaterial(
+      String(material._id),
+      [file],
+      { title: 'Updated lecture', weekNumber: null },
+      doctor,
+    );
+    expect(material).toMatchObject({
+      title: 'Updated lecture',
+      uploadedBy: doctor._id,
+      storedFile: stored,
+    });
+    expect(material.weekNumber).toBeUndefined();
+  });
+
+  it('enforces student withholding and publication gates on material preview and supports inline delivery', async () => {
+    materials.findById.mockResolvedValue({
+      _id: new Types.ObjectId(),
+      courseId: course._id,
+      title: 'Lecture PDF',
+      fileName: 'lecture.pdf',
+      mimeType: 'application/pdf',
+      fileSize: 2048,
+      isPublished: true,
+      storedFile: stored,
+    });
+
+    // Unblocked student receives fast zero-buffer PDF preview metadata
+    const pdfPreview = await service.previewCourseMaterial('id', {
+      _id: 'student',
+      role: 'student',
+    });
+    expect(pdfPreview).toMatchObject({
+      kind: 'pdf',
+      fileName: 'book.pdf',
+      mimeType: 'application/pdf',
+    });
+
+    // Inline delivery passes inline=true to MaterialStorageService
+    await service.downloadCourseMaterial('id', {}, admin, { inline: true });
+    expect(storage.deliver).toHaveBeenCalledWith(stored, {}, true);
+
+    // Blocked student is rejected from previewing
+    students.findOne.mockReturnValue({
+      lean: jest.fn().mockResolvedValue({ isBlocked: true }),
+    });
+    await expect(
+      service.previewCourseMaterial('id', { _id: 'student', role: 'student' }),
+    ).rejects.toThrow();
+  });
+
+  it('hydrates Arabic uploader names and flags missing physical files on list, preview, and book capabilities', async () => {
+    const uploaderId = new Types.ObjectId();
+    storage.exists = jest.fn().mockResolvedValue(false);
+    (service as any).userModel = {
+      find: jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue([
+            {
+              _id: uploaderId,
+              name: 'Omar Elsayed',
+              nameAr: 'عمر السيد',
+              titlePrefix: undefined,
+            },
+          ]),
+        }),
+      }),
+    };
+    materials.find.mockReturnValue({
+      sort: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue([
+          {
+            _id: new Types.ObjectId(),
+            courseId: course._id,
+            title: 'Inheritance Part 2',
+            titleAr: 'سكشن الوراثة الجزء الثاني',
+            type: 'section',
+            fileName: 'section9.pptx',
+            mimeType:
+              'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            fileSize: 56400,
+            isPublished: true,
+            uploadedBy: uploaderId,
+            uploadedByName: 'Omar Elsayed',
+            uploadedByRole: 'assistant_lecturer',
+            storedFile: stored,
+          },
+        ]),
+      }),
+    });
+
+    const listed = await service.getCourseMaterials(
+      course._id.toString(),
+      {},
+      admin,
+    );
+    expect(listed.materials[0]).toMatchObject({
+      uploadedByName: 'Omar Elsayed',
+      uploadedByNameAr: 'عمر السيد',
+      hasFile: true,
+      fileAvailable: false,
+    });
+
+    materials.findById.mockResolvedValue({
+      _id: new Types.ObjectId(),
+      courseId: course._id,
+      title: 'Missing PDF',
+      fileName: 'lecture.pdf',
+      mimeType: 'application/pdf',
+      isPublished: true,
+      storedFile: stored,
+    });
+    await expect(service.previewCourseMaterial('id', admin)).rejects.toThrow(
+      'Material file is missing',
+    );
+
+    course.syllabusFile = stored;
+    const caps = await service.getBookCapabilities(
+      course._id.toString(),
+      admin as never,
+    );
+    expect(caps.bookFileAvailable).toBe(false);
   });
 });

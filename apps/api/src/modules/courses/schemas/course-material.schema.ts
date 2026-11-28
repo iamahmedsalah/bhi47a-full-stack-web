@@ -14,6 +14,9 @@ export type CourseMaterialDocument = CourseMaterial & Document;
   timestamps: true,
 })
 export class CourseMaterial {
+  declare createdAt: Date;
+  declare updatedAt: Date;
+
   @Prop({ type: Types.ObjectId, ref: 'Course', required: true, index: true })
   courseId!: Types.ObjectId;
 
@@ -69,6 +72,9 @@ export class CourseMaterial {
 
   @Prop({ required: true, trim: true })
   uploadedByName!: string;
+
+  @Prop({ trim: true })
+  uploadedByNameAr?: string;
 
   @Prop({
     type: String,

@@ -301,6 +301,21 @@ try {
       const permissions = dialog.getByRole('group', {name:t.table.permissions, exact:true});
       assert.equal(await permissions.count(), 0);
       const courses = dialog.getByRole('group', {name:t.details.assignedCoursesTitle, exact:true});
+      if (staffType === 'doctor') {
+        assert.equal(await courses.count(), 0);
+        await dialog.getByLabel(t.fields.nameAr, {exact:true}).fill('طبيب اختبار');
+        await page.screenshot({path:path.join(output, `staff-manager-form-${locale}.png`), fullPage:true});
+        await dialog.getByRole('button', {name:t.create, exact:true}).click();
+        await dialog.waitFor({state:'hidden'});
+        assert.deepEqual(staffProfileMutations.at(-1).courseIds, []);
+        assert.equal(staffProfileMutations.at(-1).permissions, undefined);
+        await page.getByText(locale === 'ar' ? /طبيب اختبار/ : /Managed teaching staff/).first().waitFor();
+        await page.getByRole('button', {name:t.table.actions, exact:true}).first().click();
+        assert.equal(await page.getByRole('menuitem', {name:t.actions.edit, exact:true}).count(), 0);
+        assert.equal(await page.getByRole('menuitem', {name:t.actions.resetPassword, exact:true}).count(), 0);
+        await page.keyboard.press('Escape');
+        continue;
+      }
       await courses.getByRole('checkbox', {name:/QR101/}).check();
       const search = courses.getByRole('textbox', {name:locale === 'ar' ? 'البحث عن مقرر' : 'Search courses', exact:true});
       await search.fill('AS102');
@@ -327,16 +342,13 @@ try {
       assert.equal(await permissions.count(), 0);
       await courses.getByRole('checkbox', {name:/QR101/}).uncheck();
 
-      if (staffType === 'doctor') {
-        await page.screenshot({path:path.join(output, `staff-manager-form-${locale}.png`), fullPage:true});
-      }
       await dialog.getByRole('button', {name:t.save, exact:true}).click();
       await dialog.waitFor({state:'hidden'});
       assert.deepEqual(staffProfileMutations.at(-1).courseIds, []);
       assert.equal(staffProfileMutations.at(-1).permissions, undefined);
     }
   }
-  console.log('Delegated staff forms passed: Arabic/English creation, course persistence, admin-only permissions, edit/reopen, all academic types and read-only restrictions.');
+  console.log('Delegated staff forms passed: protected doctor accounts, supporting staff course persistence, administrator-only permissions and read-only restrictions in Arabic and English.');
   if (!process.argv.includes('--staff-only')) {
   for (const locale of ['en', 'ar']) {
     reset();

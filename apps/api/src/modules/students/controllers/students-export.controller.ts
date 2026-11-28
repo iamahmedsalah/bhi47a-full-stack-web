@@ -76,6 +76,7 @@ export class StudentsExportController {
       { header: 'القسم', key: 'department', width: 20 },
       { header: 'البريد الأكاديمي', key: 'academicEmail', width: 30 },
       { header: 'حالة القيد', key: 'enrollmentStatus', width: 15 },
+      { header: 'القيد الرسمي', key: 'officialEnrollmentStatus', width: 20 },
       { header: 'المجموعة', key: 'group', width: 12 },
       { header: 'السكشن', key: 'section', width: 12 },
       { header: 'رقم الجلوس', key: 'seatNumber', width: 15 },
@@ -99,6 +100,8 @@ export class StudentsExportController {
             department: curriculumDepartmentLabel(student.department, 'ar'),
             academicEmail: student.academicEmail || '-',
             enrollmentStatus: student.enrollmentStatus,
+            officialEnrollmentStatus:
+              student.officialEnrollmentStatus ?? 'UNVERIFIED',
             group: student.group || '-',
             section: student.section || '-',
             seatNumber: student.seatNumber || '-',

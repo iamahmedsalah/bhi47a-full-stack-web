@@ -448,6 +448,54 @@ describe('QuizzesService Unit Tests', () => {
     });
   });
 
+  it('gives assigned colleagues read access and limits quiz mutations to the owner or course supervisor', async () => {
+    const creatorId = new Types.ObjectId();
+    const staff = {
+      ...staffUser,
+      staffType: 'doctor',
+      permissions: [PERMISSIONS.QUIZZES_WRITE],
+    };
+    const quiz = {
+      _id: quizId,
+      courseId,
+      creatorId,
+      toObject: () => ({ creatorId }),
+    };
+    const course = {
+      doctorIds: [creatorId, new Types.ObjectId(staff._id)],
+      contentSupervisorId: undefined as Types.ObjectId | undefined,
+    };
+    mockQuizModel.findById.mockResolvedValue(quiz);
+    mockCourseModel.findById.mockReturnValue({
+      select: () => ({ lean: () => Promise.resolve(course) }),
+    });
+    await expect(
+      service.getManagementQuiz(quizId, staff),
+    ).resolves.toMatchObject({ canEdit: false, canDelete: false });
+    await expect(
+      service.update(quizId, staff, { publishResults: true }),
+    ).rejects.toThrow(ForbiddenException);
+    await expect(service.remove(quizId, staff)).rejects.toThrow(
+      ForbiddenException,
+    );
+    expect(mockQuizModel.findByIdAndUpdate).not.toHaveBeenCalled();
+    expect(mockQuizModel.findByIdAndDelete).not.toHaveBeenCalled();
+    await expect(
+      service.getManagementQuiz(quizId, { ...staff, _id: String(creatorId) }),
+    ).resolves.toMatchObject({ canEdit: true });
+    course.contentSupervisorId = new Types.ObjectId(staff._id);
+    await expect(
+      service.getManagementQuiz(quizId, staff),
+    ).resolves.toMatchObject({ canDelete: true });
+    course.doctorIds = [creatorId];
+    await expect(service.getManagementQuiz(quizId, staff)).rejects.toThrow(
+      ForbiddenException,
+    );
+    await expect(service.exportQuizAnalysis(quizId, staff)).rejects.toThrow(
+      ForbiddenException,
+    );
+  });
+
   describe('getQuizForTaking() - Security: Answer Sanitization', () => {
     it('throws ForbiddenException if quiz is not published', async () => {
       mockQuizModel.findById.mockResolvedValue({

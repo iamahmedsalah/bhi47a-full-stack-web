@@ -8,6 +8,7 @@ import { Types } from 'mongoose';
 import * as ExcelJS from 'exceljs';
 import {
   parseStudentCode,
+  formatStudentCode,
   admissionYearPrefix,
   type StudentCodeAuditResult,
 } from '@student-portal/shared';
@@ -29,6 +30,19 @@ export function codeConflict(code: string, message: string): never {
 
 @Injectable()
 export class StudentCodesService {
+  private nextReservation(
+    snapshot: Awaited<ReturnType<StudentCodeStore['snapshot']>>,
+    prefix: string,
+  ) {
+    if (!snapshot.policy || snapshot.truncated || snapshot.mappingConflict)
+      return undefined;
+    const available = snapshot.rows.find(
+      (row) => row.reason === 'CONFIRMED_AVAILABLE',
+    );
+    if (available) return available.studentCode;
+    const sequence = snapshot.maxSequence + 1;
+    return sequence <= 9999 ? formatStudentCode(prefix, sequence) : undefined;
+  }
   async assertImportOwnership(code: string, ownerId?: string) {
     const entry = await this.store.entries
       .findOne({ studentCode: code })
@@ -43,6 +57,40 @@ export class StudentCodesService {
         'CODE_RECOVERY_UNSAFE',
         'This code is held by the registry. Review it in the code audit before importing.',
       );
+    if (entry?.protectedAt && ownerId) {
+      const profile = await this.store.profiles.exists({
+        userId: ownerId,
+        officialEnrollmentStatus: 'CANCELLED',
+      });
+      if (profile)
+        codeConflict(
+          'ADMISSION_ARCHIVED',
+          'Use the admission decision workflow to restore this student.',
+        );
+    }
+    if (!ownerId && /^\d{6}$/.test(code)) {
+      const prefix = code.slice(0, 2);
+      const policy = await this.store.years
+        .findOne({
+          $or: [
+            { allocationPrefix: prefix },
+            { yearPrefix: prefix, allocationPrefix: { $exists: false } },
+          ],
+        })
+        .lean();
+      if (
+        policy &&
+        (await this.store.periods.exists({
+          academicYear: policy.academicYear,
+          lifecycleEnabled: true,
+          deletedAt: { $exists: false },
+        }))
+      )
+        codeConflict(
+          'STUDENT_CODE_MANAGED_BY_ADMISSIONS',
+          'Approve the application through Admissions to allocate this code.',
+        );
+    }
   }
   async recordImport(
     rows: Array<{ studentCode: string; rowNum: number }>,
@@ -135,6 +183,11 @@ export class StudentCodesService {
             'Scan again and review the latest owner.',
           );
         const row = snapshot.rows.find((item) => item.studentCode === code);
+        if (row?.permanent)
+          codeConflict(
+            'CODE_PERMANENT',
+            'Archive this student through the enrollment workflow.',
+          );
         if (
           snapshot.truncated ||
           row?.status !== 'ASSIGNED' ||
@@ -335,10 +388,13 @@ export class StudentCodesService {
             'The audit changed. Scan again.',
           );
         const row = snapshot.rows.find((item) => item.studentCode === code);
+        const sequence = parseStudentCode(code, dto.yearPrefix);
         if (
           !snapshot.truncated &&
-          row &&
-          ['MISSING', 'AVAILABLE'].includes(row.status)
+          sequence &&
+          (row?.status === 'MISSING' ||
+            row?.reason === 'CONFIRMED_AVAILABLE' ||
+            (!row && code === this.nextReservation(snapshot, dto.yearPrefix)))
         ) {
           if (!snapshot.policy || snapshot.mappingConflict)
             codeConflict(
@@ -362,7 +418,7 @@ export class StudentCodesService {
               $setOnInsert: {
                 academicYear: dto.academicYear,
                 yearPrefix: dto.yearPrefix,
-                sequence: row.sequence,
+                sequence,
                 assignmentHistory: [],
               },
             },
@@ -375,7 +431,7 @@ export class StudentCodesService {
                 academicYear: dto.academicYear,
                 actorId: new Types.ObjectId(actorId),
                 action: 'RESERVED_HELD',
-                from: row.status,
+                from: row?.status ?? 'MISSING',
                 to: 'RESERVED',
                 reason: dto.reason,
                 at: new Date(),
@@ -398,7 +454,11 @@ export class StudentCodesService {
           .findOne({ studentCode: code, status: 'ASSIGNED' })
           .session(session)
           .lean();
-        if (!entry?.currentStudentId || !entry.assignmentHistory.length)
+        if (
+          !entry?.currentStudentId ||
+          entry.protectedAt ||
+          !entry.assignmentHistory.length
+        )
           codeConflict(
             'CODE_RECOVERY_UNSAFE',
             'Ownership history requires review.',
@@ -566,6 +626,7 @@ export class StudentCodesService {
       canInitialize: snapshot.canInitialize,
       mappingConflict: snapshot.mappingConflict,
       reuseEnabled: true,
+      nextReservationCode: this.nextReservation(snapshot, query.yearPrefix),
       policy: snapshot.policy
         ? {
             academicYear: snapshot.policy.academicYear,

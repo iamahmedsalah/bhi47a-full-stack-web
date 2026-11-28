@@ -26,6 +26,8 @@ interface CustomDropdownProps {
   options: CustomDropdownOption[];
   onValueChange: (value: string) => void;
   ariaLabel?: string;
+  triggerId?: string;
+  invalid?: React.AriaAttributes['aria-invalid'];
   placeholder?: React.ReactNode;
   className?: string;
   menuClassName?: string;
@@ -81,6 +83,8 @@ export function CustomDropdown({
   options,
   onValueChange,
   ariaLabel,
+  triggerId,
+  invalid,
   placeholder,
   className,
   menuClassName,
@@ -250,12 +254,14 @@ export function CustomDropdown({
         ref={triggerRef}
         type="button"
         aria-label={ariaLabel}
+        id={triggerId}
+        data-invalid={invalid === true || invalid === "true" ? "" : undefined}
         aria-haspopup="listbox"
         aria-expanded={open}
         disabled={disabled}
         onClick={openMenu}
         className={cn(
-          'flex h-10 w-full cursor-pointer items-center justify-between gap-2.5 rounded-squircle border border-border bg-surface/50 px-3.5 py-2 text-start text-sm font-normal text-foreground hover:bg-surface/70 focus:outline-none focus:ring-1 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50',
+          'flex h-10 w-full cursor-pointer items-center justify-between gap-2.5 rounded-squircle border border-border bg-surface/50 px-3.5 py-2 text-start text-sm font-normal text-foreground hover:bg-surface/70 focus:outline-none focus:ring-1 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50 data-[invalid]:border-danger',
           className,
         )}
       >

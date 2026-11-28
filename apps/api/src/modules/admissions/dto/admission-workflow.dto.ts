@@ -1,3 +1,4 @@
+import { IntersectionType } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -23,6 +24,8 @@ import {
   ADMISSION_MOBILE,
   ADMISSION_REJECTION_REASONS,
   ADMISSION_REQUEST_STATUSES,
+  ADMISSION_QUEUES,
+  type AdmissionQueue,
   ADMISSION_REFERENCE_PATTERN,
   ADMISSION_TRACKING_SECRET_PATTERN,
   normalizeAdmissionReference,
@@ -94,6 +97,13 @@ export class PublicStatusDto {
   @Matches(ADMISSION_TRACKING_SECRET_PATTERN)
   secret!: string;
 }
+export class PublicCorrectionDto extends IntersectionType(
+  ApplicantDto,
+  PublicStatusDto,
+) {
+  @IsInt() @Min(0) revision!: number;
+  @IsString() @MaxLength(2048) captchaToken!: string;
+}
 export class AccessCreateDto {
   @IsMongoId() admissionPeriodId!: string;
   @Transform(trim) @IsString() @MinLength(2) @MaxLength(120) label!: string;
@@ -107,6 +117,7 @@ export class AdmissionListDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit = 20;
   @IsOptional() @Transform(trim) @IsString() @MaxLength(160) search?: string;
   @IsOptional() @IsIn(ADMISSION_REQUEST_STATUSES) status?: string;
+  @IsOptional() @IsIn(ADMISSION_QUEUES) queue?: AdmissionQueue;
   @IsOptional() @Matches(/^\d{4}-\d{4}$/) academicYear?: string;
   @IsOptional() @IsDateString() from?: string;
   @IsOptional() @IsDateString() to?: string;
@@ -125,7 +136,93 @@ export class DecisionDto extends RevisionDto {
   @Equals(true)
   confirmed!: true;
 }
+export class MinistryEvidenceDto {
+  @Transform(trim) @IsString() @MinLength(2) @MaxLength(160) reference!: string;
+  @IsDateString({ strict: true })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  decisionDate!: string;
+  @IsMongoId() documentId!: string;
+  @IsOptional() @Transform(trim) @IsString() @MaxLength(1000) notes?: string;
+}
+
+export class LifecycleTransitionDto extends DecisionDto {
+  @Matches(/^[A-Za-z0-9_-]{16,64}$/) operationId!: string;
+  @IsIn([
+    'APPROVE_MINISTRY',
+    'REJECT_MINISTRY',
+    'CONFIRM_ENROLLMENT',
+    'CORRECT_MINISTRY',
+  ])
+  transition!:
+    | 'APPROVE_MINISTRY'
+    | 'REJECT_MINISTRY'
+    | 'CONFIRM_ENROLLMENT'
+    | 'CORRECT_MINISTRY';
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => MinistryEvidenceDto)
+  ministryEvidence?: MinistryEvidenceDto;
+  @IsOptional()
+  @IsDateString({ strict: true })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  enrollmentEffectiveDate?: string;
+}
+export class ProvisionalPolicyScopeDto {
+  @Matches(/^\d{4}-\d{4}$/) academicYear!: string;
+  @IsIn(['first', 'second']) semester!: string;
+}
+
+export class VerifyLegacyEnrollmentDto {
+  @Transform(trim)
+  @IsString()
+  @MinLength(2)
+  @MaxLength(64)
+  studentCode!: string;
+  @Transform(trim)
+  @IsString()
+  @MinLength(2)
+  @MaxLength(160)
+  evidenceReference!: string;
+  @IsDateString({ strict: true })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  enrollmentEffectiveDate!: string;
+  @IsOptional() @IsIn(['COORDINATION', 'TRANSFER']) admissionType?:
+    'COORDINATION' | 'TRANSFER';
+  @Transform(({ obj }: { obj: Record<string, unknown> }) => obj.confirmed)
+  @Equals(true)
+  confirmed!: true;
+}
+
+export class AdmissionFollowupCompleteDto {
+  @Transform(trim) @IsString() @MinLength(2) @MaxLength(160) reference!: string;
+}
+
+export class UpdateProvisionalPolicyDto extends ProvisionalPolicyScopeDto {
+  @Transform(({ obj }: { obj: Record<string, unknown> }) => obj.midterm)
+  @IsBoolean()
+  midterm!: boolean;
+  @Transform(({ obj }: { obj: Record<string, unknown> }) => obj.coursework)
+  @IsBoolean()
+  coursework!: boolean;
+  @Transform(({ obj }: { obj: Record<string, unknown> }) => obj.quiz)
+  @IsBoolean()
+  quiz!: boolean;
+  @Transform(({ obj }: { obj: Record<string, unknown> }) => obj.finalExam)
+  @IsBoolean()
+  finalExam!: boolean;
+}
+
 export class ApproveApplicantDto extends RevisionDto {
+  @IsOptional() @IsIn(['PENDING', 'APPROVED']) ministryStatus?:
+    'PENDING' | 'APPROVED';
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => MinistryEvidenceDto)
+  ministryEvidence?: MinistryEvidenceDto;
+  @IsOptional()
+  @IsDateString({ strict: true })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  enrollmentEffectiveDate?: string;
   @IsIn(['1', '2', '3', '4']) level!: '1' | '2' | '3' | '4';
   @IsIn(['1', '2']) semester!: '1' | '2';
   @Matches(/^[A-Z][A-Z0-9_-]{1,19}$/) department!: string;

@@ -1,5 +1,6 @@
 export const ADMISSION_REQUEST_STATUSES = [
   "PENDING",
+  "NEEDS_CORRECTION",
   "WAITLISTED",
   "APPROVED",
   "REJECTED",
@@ -7,6 +8,20 @@ export const ADMISSION_REQUEST_STATUSES = [
 ] as const;
 export type AdmissionRequestStatus =
   (typeof ADMISSION_REQUEST_STATUSES)[number];
+export const OFFICIAL_ENROLLMENT_STATUSES = ["PROVISIONAL", "ENROLLED", "CANCELLED"] as const;
+export type OfficialEnrollmentStatus = (typeof OFFICIAL_ENROLLMENT_STATUSES)[number];
+export const MINISTRY_STATUSES = ["NOT_REQUIRED", "PENDING", "APPROVED", "REJECTED"] as const;
+export type MinistryStatus = (typeof MINISTRY_STATUSES)[number];
+export type AdmissionType = "COORDINATION" | "TRANSFER";
+export const ADMISSION_QUEUES = ["review", "correction", "transfers", "ready", "archive"] as const;
+export type AdmissionQueue = (typeof ADMISSION_QUEUES)[number];
+
+export interface MinistryEvidence {
+  reference: string;
+  decisionDate: string;
+  documentId: string;
+  notes?: string;
+}
 /** Earlier unapproved cancellations are presented as the single rejection outcome. */
 export function admissionApplicantStatus(
   status: AdmissionRequestStatus,
@@ -90,6 +105,9 @@ export interface AdmissionApproval {
   groupId?: string;
   passedCourses: string[];
   confirmed: true;
+  ministryStatus?: "PENDING" | "APPROVED";
+  ministryEvidence?: MinistryEvidence;
+  enrollmentEffectiveDate?: string;
 }
 export interface AdmissionRequestItem extends AdmissionApplicant {
   _id: string;
@@ -98,6 +116,11 @@ export interface AdmissionRequestItem extends AdmissionApplicant {
   admissionPeriodId: string;
   status: AdmissionRequestStatus;
   revision: number;
+  lifecycleEnabled?: boolean;
+  ministryStatus?: MinistryStatus;
+  officialEnrollmentStatus?: OfficialEnrollmentStatus;
+  enrollmentEffectiveDate?: string;
+  correctionInstructions?: string;
   nationalIdMasked: string;
   nationalId?: string;
   studentId?: string;
@@ -119,6 +142,7 @@ export interface AdmissionRequestItem extends AdmissionApplicant {
     at: string;
     reason?: string;
     revision: number;
+    details?: Record<string, unknown>;
   }>;
 }
 export interface AdmissionAccessItem {
@@ -164,6 +188,9 @@ export interface AdmissionStatus {
   studentCode?: string;
   rejection?: { reasonCode: string; explanation?: string };
   waitlistPosition?: number;
+  correction?: { instructions: string; revision: number; applicant: AdmissionApplicant };
+  ministryStatus?: MinistryStatus;
+  officialEnrollmentStatus?: OfficialEnrollmentStatus;
 }
 export interface AdmissionPage<T> {
   items: T[];

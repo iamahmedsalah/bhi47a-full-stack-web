@@ -47,6 +47,7 @@ export function admissionPeriodFormSchema(
       opensAt: z.string(),
       closesAt: z.string(),
       isEnabled: z.boolean(),
+      lifecycleEnabled: z.boolean().optional(),
     })
     .superRefine((values, ctx) => {
       const times = periodTimes(values, initial);

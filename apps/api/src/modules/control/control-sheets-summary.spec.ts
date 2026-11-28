@@ -4,6 +4,7 @@ import {
   PERMISSIONS,
 } from '@student-portal/shared';
 import type { AuthenticatedUser } from '../auth/types/authenticated-request';
+import { ControlReleaseStore } from '../grades/control-release.store';
 import { ControlSheetsService } from './services/control-sheets.service';
 
 describe('control course summary projection', () => {
@@ -249,14 +250,14 @@ describe('control course summary projection', () => {
         passed: 0,
       },
     ]);
+    const activeReleases = jest.fn().mockResolvedValue([]);
     const service = new ControlSheetsService(
       {
         find: findSheets,
         db: {
+          models: {},
           collection: jest.fn().mockReturnValue({
-            find: jest
-              .fn()
-              .mockReturnValue({ toArray: jest.fn().mockResolvedValue([]) }),
+            find: jest.fn().mockReturnValue({ toArray: activeReleases }),
           }),
         },
       } as never,
@@ -276,17 +277,16 @@ describe('control course summary projection', () => {
       } as never,
     );
 
-    const result = await service.listCourses(
-      {
-        _id: new Types.ObjectId().toHexString(),
-        role: 'admin',
-        name: 'Admin',
-        permissions: [PERMISSIONS.CONTROL_SHEETS_VIEW],
-        mustChangePassword: false,
-        tokenVersion: 0,
-      },
-      { academicYear: '2026-2027', semester: 'first' },
-    );
+    const user: AuthenticatedUser = {
+      _id: new Types.ObjectId().toHexString(),
+      role: 'admin',
+      name: 'Admin',
+      permissions: [PERMISSIONS.CONTROL_SHEETS_VIEW],
+      mustChangePassword: false,
+      tokenVersion: 0,
+    };
+    const term = { academicYear: '2026-2027', semester: 'first' as const };
+    const result = await service.listCourses(user, term);
 
     const components = result.items[0].components;
     expect(components.find((c) => c.key === 'coursework')?.passRate).toBeNull();
@@ -303,6 +303,30 @@ describe('control course summary projection', () => {
     >;
     const groupStage = pipeline[1]?.$group as Record<string, unknown>;
     expect(JSON.stringify(groupStage?.passed)).toContain('"then":15');
+
+    const officialCounts = jest
+      .spyOn(ControlReleaseStore.prototype, 'officialCourseCounts')
+      .mockResolvedValue([]);
+    try {
+      expect((await service.dashboard(user, term)).items[0]).toMatchObject({
+        results: 0,
+        exams: {
+          midterm: {
+            published: false,
+            passRate: { passed: 8, total: 10, ratio: 0.8, threshold: 15 },
+          },
+          final: { published: false, passRate: { total: 0 } },
+        },
+      });
+      activeReleases.mockResolvedValue([
+        { scope: { courseId, component: 'midterm' } },
+      ]);
+      expect((await service.dashboard(user, term)).items[0]).toMatchObject({
+        exams: { midterm: { published: true, passRate: { ratio: 0.8 } } },
+      });
+    } finally {
+      officialCounts.mockRestore();
+    }
   });
 
   it('returns 4-stage workflow breakdown and actor history for getWorkflowHistory()', async () => {

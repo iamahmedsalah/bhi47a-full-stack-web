@@ -8,7 +8,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { useParams, useSearchParams } from 'next/navigation';
 import { Download, Plus, UploadCloud, Users, Loader2, BookOpenCheck, KeyRound, ArrowLeftRight } from 'lucide-react';
-import { COURSE_LEVEL_VALUES, ENROLLMENT_STATUS_VALUES } from '@student-portal/shared';
+import { COURSE_LEVEL_VALUES, ENROLLMENT_STATUS_VALUES, PERMISSIONS } from '@student-portal/shared';
 import { toast } from 'sonner';
 
 import api, { getApiErrorMessage } from '@/lib/api';
@@ -78,7 +78,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { PasswordRequirementDialog } from '@/features/students/components/password-requirement-dialog';
 import { FilterBar } from '@/components/ui/filter-bar';
-import { Input } from '@/components/ui/input';
+import { AcademicYearSelect } from '@/components/ui/academic-year-select';
 import { PageSkeletonLoader } from '@/components/ui/page-suspense-fallback';
 import { PageTitleBanner } from '@/components/ui/page-title-banner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -93,7 +93,7 @@ const initialForm = {
   level: '1',
   group: '',
   section: '',
-  academicYear: '2024-2025',
+  academicYear: '',
   semester: 'first',
   seatNumber: '',
   examRoom: '',
@@ -125,6 +125,7 @@ const studentImportColumns = [
 
 function StudentsPageContent() {
   const t = useTranslations('students');
+  const tAdmission = useTranslations('admissionWorkflow');
   const tCommon = useTranslations('common');
   const params = useParams();
   const locale = params.locale as string;
@@ -201,7 +202,7 @@ function StudentsPageContent() {
   const [isExporting, setIsExporting] = useState(false);
   const [isAutoRegistering, setIsAutoRegistering] = useState(false);
   const [isAutoRegisterModalOpen, setIsAutoRegisterModalOpen] = useState(false);
-  const [autoRegYear, setAutoRegYear] = useState('2026-2027');
+  const [autoRegYear, setAutoRegYear] = useState('');
   const [autoRegSemester, setAutoRegSemester] = useState<'first' | 'second'>('first');
   const [autoRegOverwrite, setAutoRegOverwrite] = useState(false);
   const [isBulkMustChangeOpen, setIsBulkMustChangeOpen] = useState(false);
@@ -255,6 +256,7 @@ function StudentsPageContent() {
   }, [searchTab]);
 
   const handleAutoRegisterFirstYear = async () => {
+    if (!autoRegYear) return;
     setIsAutoRegistering(true);
     setIsAutoRegisterModalOpen(false);
 
@@ -267,7 +269,7 @@ function StudentsPageContent() {
     try {
       const selectedStudents = selectedStudentsList;
       const payload: Record<string, unknown> = {
-        academicYear: autoRegYear.trim() || '2026-2027',
+        academicYear: autoRegYear,
         semester: autoRegSemester,
         forceOverwrite: autoRegOverwrite,
       };
@@ -773,6 +775,10 @@ function StudentsPageContent() {
                     {t(`status_${st}`)}
                   </SelectItem>
                 ))}
+                <SelectItem value="official">{tAdmission('lifecycle.official')}</SelectItem>
+                <SelectItem value="provisional">{tAdmission('lifecycle.provisional')}</SelectItem>
+                <SelectItem value="unverified">{tAdmission('lifecycle.unverified')}</SelectItem>
+                {(user?.role === 'admin' || user?.permissions?.includes(PERMISSIONS.ADMISSIONS_ARCHIVE_READ)) && <SelectItem value="ministry-archived">{tAdmission('lifecycle.queue.archive')}</SelectItem>}
               </SelectContent>
             </Select>
 
@@ -1078,18 +1084,11 @@ function StudentsPageContent() {
               )}
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">
-                {locale === 'ar' ? 'العام الأكاديمي' : 'Academic Year'}
-              </label>
-              <Input
-                value={autoRegYear}
-                onChange={(e) => setAutoRegYear(e.target.value)}
-                placeholder="2026-2027"
-                dir="ltr"
-                className="text-start font-mono"
-              />
-            </div>
+            <AcademicYearSelect
+              value={autoRegYear}
+              onChange={setAutoRegYear}
+              defaultToCurrent
+            />
 
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-foreground">
@@ -1167,7 +1166,7 @@ function StudentsPageContent() {
           <DialogFooter className="flex-row-reverse sm:flex-row rtl:sm:justify-start gap-2 pt-2">
             <Button
               type="button"
-              disabled={isAutoRegistering}
+              disabled={isAutoRegistering || !autoRegYear}
               onClick={handleAutoRegisterFirstYear}
               className="gap-2"
             >

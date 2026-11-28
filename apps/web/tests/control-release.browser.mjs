@@ -38,21 +38,26 @@ let enabledStudentTypes;
 let absentComponent='midterm';
 let course111=false, course111Status='present', tuitionBlocked=false, resultMode='midterm';
 let studentResponseOrder='immediate';
+let emptyResults=false, missingFinal=false, zeroRecorded=false, publishedHistory=false;
 const server=http.createServer(async(req,res)=>{
   try {
     const url=new URL(req.url,'http://localhost');
     if((url.pathname==='/students/me/results'&&studentResponseOrder==='profile-first')||(url.pathname==='/students/me/profile'&&studentResponseOrder==='results-first')) await new Promise(resolve=>setTimeout(resolve,200));
     const send=(data,status=200)=>{res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(status===200?{success:true,data,timestamp:new Date().toISOString()}:data));};
     if(url.pathname==='/students/me/results-window')return send({visibleExamTypes:enabledStudentTypes,isOpen:!tuitionBlocked&&Date.now()<Date.parse(studentCloseAt),visibilityVersion:tuitionBlocked?'tuition-blocked':'tuition-clear',closeAt:studentCloseAt,reason:Date.now()>=Date.parse(studentCloseAt)?'ended':tuitionBlocked?'tuition_blocked':undefined,studentLevel:course111?'3':'1',isLevelPublished:!course111});
-    if(url.pathname==='/students/me/results' && tuitionBlocked)return send([]);
-    if(url.pathname==='/students/me/profile')return send({level:course111?'3':'1',gpa:0,academicWarnings:2});
+    if(url.pathname==='/students/me/results' && (tuitionBlocked||emptyResults))return send([]);
+    if(url.pathname==='/students/me/profile')return send({level:course111?'3':'1',gpa:publishedHistory?2.5:0,completedCreditHours:publishedHistory?3:0,hasAcademicResults:zeroRecorded||publishedHistory,academicWarnings:2});
     if(url.pathname==='/students/me/results' && course111 && resultMode!=='midterm'){
       const common={courseCode:'111',courseName:'Synthetic course 111',courseNameEn:'Synthetic course 111',academicYear:'2026-2027',semester:'first',academicLevel:'1',isPublished:true};
       const final={...common,_id:'final-111',examType:'final',grade:course111Status==='present'?48:0,maxGrade:60,status:course111Status,officialResult:{official:course111Status!=='incomplete',total:course111Status==='present'?80:32,totalMax:100,passed:course111Status==='present',percentage:course111Status==='present'?80:32,gradePoints:course111Status==='present'?3.3:0,letterGrade:course111Status==='banned'?'FX':course111Status==='incomplete'?'IC':course111Status==='present'?'B+':'F'}};
+      if(missingFinal){final.grade=null;final.officialResult={...final.officialResult,total:null,percentage:null,gradePoints:null};}
+      if(zeroRecorded){final.grade=0;final.officialResult={...final.officialResult,total:0,percentage:0,passed:false,gradePoints:0,letterGrade:'F'};}
+      if(publishedHistory){final.historicalImport=true;delete final.officialResult;}
       return send(resultMode==='both'?[{...common,_id:'midterm-111',examType:'midterm',grade:15,maxGrade:20,status:'present'},final]:[final]);
     }
     if(url.pathname==='/students/me/results' && course111)return send([{_id:'course111-midterm',courseCode:'111',courseName:'Synthetic course 111',courseNameAr:'مقرر تجريبي 111',courseNameEn:'Synthetic course 111',examType:'midterm',grade:course111Status==='present'?5:0,maxGrade:20,status:course111Status,academicYear:'2026-2027',semester:'first',academicLevel:'1',isPublished:true}]);
     if(url.pathname==='/students/me/results')return send(Date.now()>=Date.parse(studentCloseAt)?[]:[{_id:'synthetic-midterm',courseCode:'SYNTH101',courseName:'Synthetic course',courseNameEn:'Synthetic course',courseNameAr:'Synthetic course',examType:'midterm',grade:absentComponent==='midterm'?0:15,maxGrade:20,status:absentComponent==='midterm'?'absent':'present',academicYear:'2026-2027',semester:'first',academicLevel:'1',isPublished:true},{_id:'synthetic-final',courseCode:'SYNTH101',courseName:'Synthetic course',examType:'final',grade:absentComponent==='final'?0:55,maxGrade:60,status:absentComponent==='final'?'absent':'present',academicYear:'2026-2027',semester:'first',academicLevel:'1',isPublished:true}]);
+    if(url.pathname==='/admin/academic-years/options')return send({items:['2026-2027','2025-2026'],currentYear:'2026-2027',currentSemester:'first'});
     if(url.pathname==='/admin/control/courses')return send({items:[{courseId,code:'SYNTH101',name:'Synthetic course',nameAr:'SYNTH101',nameEn:'Synthetic course',rosterCount:1,components:['coursework','midterm','final'].map(key=>({key,sheetId,slug:`synth101-${key}`,workflowState:'APPROVED',releaseActive:active&&key==='final',entered:1,published:active?1:0}))}]});
     if(url.pathname.startsWith('/admin/grades/')){
       const chunks=[];for await(const chunk of req)chunks.push(chunk);
@@ -242,6 +247,48 @@ try{
   await page.getByRole('columnheader').filter({hasText:'Final Exam'}).waitFor();
   await page.getByRole('note').filter({hasText:'The final column is enabled'}).waitFor();
   assert.equal(await page.getByRole('row').filter({hasText:'111'}).getByText('48 / 60',{exact:true}).count(),0);
+  for(const locale of ['ar','en']){
+    const url=`${base}/${locale}/dashboard/results?view=student`;
+    const gpa=page.getByText(locale==='ar'?'المعدل التراكمي':'Cumulative GPA',{exact:true}).locator('../..');
+    const credits=page.getByText(locale==='ar'?'الساعات المكتملة':'Completed Credits',{exact:true}).locator('../..');
+    studentCloseAt=new Date(Date.now()+180000).toISOString();
+    emptyResults=true;
+    await page.goto(url);
+    await gpa.getByText('—',{exact:true}).waitFor();
+    await credits.getByText('—',{exact:true}).waitFor();
+    assert.equal(await page.getByRole('button',{name:locale==='ar'?'طباعة الشهادة':'Print certificate',exact:true}).count(),0);
+    emptyResults=false;
+    missingFinal=true;
+    resultMode='both';
+    await page.goto(url);
+    const row=page.getByRole('row').filter({hasText:'111'});
+    await row.getByText('15 / 20',{exact:true}).waitFor();
+    await gpa.getByText('—',{exact:true}).waitFor();
+    await credits.getByText('—',{exact:true}).waitFor();
+    assert.equal((await row.getByRole('cell').nth(2).innerText()).trim(),'—');
+    assert.equal((await row.getByRole('cell').nth(3).innerText()).trim(),'—');
+    const [certificate]=await Promise.all([
+      page.waitForEvent('popup'),
+      page.getByRole('button',{name:locale==='ar'?'طباعة الشهادة':'Print certificate',exact:true}).click(),
+    ]);
+    await certificate.locator('.summary-band').waitFor();
+    assert.deepEqual((await certificate.locator('.summary-band .sum-val').allTextContents()).map(value=>value.trim()),Array(5).fill('—'));
+    await certificate.close();
+    missingFinal=false;
+    zeroRecorded=true;
+    await page.goto(url);
+    await row.getByText('0 / 60',{exact:true}).waitFor();
+    await row.getByText('0.0%',{exact:true}).waitFor();
+    await gpa.getByText('0.00 / 4.00',{exact:true}).waitFor();
+    await credits.getByText('0',{exact:true}).waitFor();
+    zeroRecorded=false;
+    publishedHistory=true;
+    await page.goto(url);
+    await row.getByText('48 / 60',{exact:true}).waitFor();
+    await gpa.getByText('2.50 / 4.00',{exact:true}).waitFor();
+    await credits.getByText('3',{exact:true}).waitFor();
+    publishedHistory=false;
+  }
   for(const locale of ['ar','en']){
     await page.goto(base+'/'+locale+'/admin/grades?view=form');
     await page.getByRole('dialog').waitFor();

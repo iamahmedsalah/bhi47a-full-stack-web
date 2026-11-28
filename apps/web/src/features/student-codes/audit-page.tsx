@@ -1,6 +1,8 @@
 "use client";
 
-import { curriculumDepartmentLabel } from "@student-portal/shared";
+import { HelpNote } from "@/components/ui/help-note";
+
+import { curriculumDepartmentLabel, type StudentCodeAuditResult } from "@student-portal/shared";
 import { AdmissionSection } from "@/features/admissions/admission-section";
 
 import { useEffect, useMemo, useState } from "react";
@@ -96,6 +98,12 @@ export default function StudentCodesPage({
   const canViewStudent =
     isAdmin ||
     Boolean(user?.permissions?.includes(PERMISSIONS.STUDENTS_READ));
+  const nextHoldRow = (snapshot: StudentCodeAuditResult): StudentCodeFinding | undefined => {
+    const code = snapshot.nextReservationCode;
+    if (!code) return undefined;
+    return snapshot.items.find((row) => row.studentCode === code) ??
+      { studentCode: code, sequence: Number(code.slice(2)), status: 'MISSING', reason: 'UNVERIFIED_GAP' };
+  };
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -393,6 +401,7 @@ export default function StudentCodesPage({
               <span className={`inline-flex items-center gap-1.5 rounded-squircle border px-2.5 py-1 text-xs font-semibold select-none ${badgeColor}`}>
                 {badgeIcon}
                 <span>{t(`statuses.${row.status}`)}</span>
+                {row.permanent && <span className="text-xs">{t('permanent')}</span>}
               </span>
             </TableCell>
           );
@@ -532,13 +541,13 @@ export default function StudentCodesPage({
                         }
                       >
                         <Unlock className="h-4 w-4 text-emerald-500 shrink-0" />
-                        <span>{t("recover")}</span>
+                        <span>{t(row.status === 'RESERVED' ? 'unreserve' : 'recover')}</span>
                       </DropdownMenu.Item>
                     )}
 
                   {/* Action: Hold / Reserve Code */}
-                  {canManage &&
-                    (row.reason === "PREVIOUS_OWNER_MISSING" || ["MISSING", "AVAILABLE"].includes(row.status)) &&
+                  {canManage && !row.permanent &&
+                    (row.reason === "PREVIOUS_OWNER_MISSING" || (query.data?.policy && !query.data.mappingConflict && ['UNVERIFIED_GAP', 'CONFIRMED_AVAILABLE'].includes(row.reason))) &&
                     !query.data?.truncated && (
                       <DropdownMenu.Item
                         className="flex cursor-pointer items-center gap-2 rounded-squircle px-3 py-2 text-xs font-semibold text-amber-600 dark:text-amber-400 outline-none hover:bg-amber-500/10 focus:bg-amber-500/10 transition-colors"
@@ -547,11 +556,11 @@ export default function StudentCodesPage({
                         }
                       >
                         <Lock className="h-4 w-4 text-amber-500 shrink-0" />
-                        <span>{t("hold")}</span>
+                        <span>{t(row.reason === 'PREVIOUS_OWNER_MISSING' ? 'holdPreviousOwner' : 'hold')}</span>
                       </DropdownMenu.Item>
                     )}
 
-                  {canDeleteStudent && row.status === "ASSIGNED" && !query.data?.truncated && (
+                  {canDeleteStudent && row.status === "ASSIGNED" && !row.permanent && !query.data?.truncated && (
                     <DropdownMenu.Item
                       className="flex cursor-pointer items-center gap-2 rounded-squircle px-3 py-2 text-xs text-danger outline-none focus:bg-secondary"
                       onSelect={() => setIntent({ snapshot: query.data!, row, deleteStudent: true })}
@@ -677,11 +686,7 @@ export default function StudentCodesPage({
           )}
         </PageTitleBanner>
       )}
-      <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm leading-6 space-y-3">
-        <div className="flex items-center gap-2 font-bold text-foreground">
-          <BookOpenCheck className="h-4 w-4 text-primary" />
-          <span>{dir === "rtl" ? "دليل وملاحظات إدارة وتدقيق أكواد الطلاب" : "Student Code Audit & Management Guide"}</span>
-        </div>
+      <HelpNote title={t("auditGuide")} icon={<BookOpenCheck className="size-4 shrink-0 text-primary" />}>
         <p className="text-xs text-muted-foreground">
           {t("workflowHelp")}
         </p>
@@ -689,7 +694,7 @@ export default function StudentCodesPage({
           <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-2.5 text-xs">
             <span className="font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1.5 mb-1">
               <Lock className="h-3.5 w-3.5" />
-              <span>{dir === "rtl" ? "1. حجز الكود (Reserve / Hold)" : "1. Reserve / Hold Code"}</span>
+              <span>{dir === "rtl" ? "حجز الكود" : "Hold a code"}</span>
             </span>
             <p className="text-[11px] text-muted-foreground leading-relaxed">
               {dir === "rtl"
@@ -701,7 +706,7 @@ export default function StudentCodesPage({
           <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-2.5 text-xs">
             <span className="font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 mb-1">
               <Unlock className="h-3.5 w-3.5" />
-              <span>{dir === "rtl" ? "2. تحرير الكود (Free / Recover)" : "2. Free / Recover Code"}</span>
+              <span>{dir === "rtl" ? "تحرير الكود" : "Recover a code"}</span>
             </span>
             <p className="text-[11px] text-muted-foreground leading-relaxed">
               {dir === "rtl"
@@ -713,7 +718,7 @@ export default function StudentCodesPage({
           <div className="rounded-lg border border-primary/20 bg-primary/5 p-2.5 text-xs">
             <span className="font-semibold text-primary flex items-center gap-1.5 mb-1">
               <History className="h-3.5 w-3.5" />
-              <span>{dir === "rtl" ? "3. سجل التخصيص (History Log)" : "3. History & Audit Log"}</span>
+              <span>{dir === "rtl" ? "سجل التخصيص" : "Allocation history"}</span>
             </span>
             <p className="text-[11px] text-muted-foreground leading-relaxed">
               {dir === "rtl"
@@ -722,7 +727,7 @@ export default function StudentCodesPage({
             </p>
           </div>
         </div>
-      </div>
+      </HelpNote>
       <CodeScopeForm
         configuredYears
         key={`${academicYear}/${yearPrefix}`}
@@ -755,8 +760,28 @@ export default function StudentCodesPage({
         <>
           {query.data && (
             <>
-              <p className="rounded-xl border p-3 text-sm">{t("lastScanScope")}: <bdi>{query.data.academicYear}</bdi> / <bdi>{query.data.yearPrefix}</bdi></p>
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-3 text-sm">
+                <div>
+                  <p>{t("lastScanScope")}: <bdi>{query.data.academicYear}</bdi> / <bdi>{query.data.yearPrefix}</bdi></p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("scannedAt", { value: new Intl.DateTimeFormat(locale === "ar" ? "ar-EG" : "en-GB", {
+                      timeZone: "Africa/Cairo",
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    }).format(new Date(query.data.scannedAt)) })}
+                  </p>
+                </div>
+                {query.data.nextReservationCode && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span>{t("nextCandidate")} <bdi className="font-mono font-semibold">{query.data.nextReservationCode}</bdi></span>
+                    {canManage && <Button disabled={pending || query.isFetching} onClick={() => {
+                      const snapshot = query.data!;
+                      setIntent({ snapshot, row: nextHoldRow(snapshot), hold: true, nextHold: true });
+                    }}>{t("holdNext")}</Button>}
+                  </div>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 2xl:grid-cols-6">
                 {statuses.map((key) => (
                   <button
                     type="button"
@@ -766,7 +791,7 @@ export default function StudentCodesPage({
                       setSelectedKeys([]);
                       state.setFilter("status", key);
                     }}
-                    className="rounded-xl border border-border/70 bg-card p-4 text-start transition-colors hover:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary"
+                    className="min-w-0 rounded-xl border border-border/70 bg-card p-3 text-start transition-colors hover:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary aria-pressed:border-primary/60 aria-pressed:bg-primary/10"
                   >
                     <p className="text-xs text-muted-foreground">
                       {t(`statuses.${key}`)}
@@ -779,18 +804,6 @@ export default function StudentCodesPage({
                   </button>
                 ))}
               </div>
-              <p className="text-xs text-muted-foreground">
-                {t("scannedAt", {
-                  value: new Intl.DateTimeFormat(
-                    locale === "ar" ? "ar-EG" : "en-GB",
-                    {
-                      timeZone: "Africa/Cairo",
-                      dateStyle: "medium",
-                      timeStyle: "short",
-                    },
-                  ).format(new Date(query.data.scannedAt)),
-                })}
-              </p>
               {query.data.truncated && (
                 <p role="alert" className="text-danger">
                   {t("truncated")}
@@ -950,7 +963,9 @@ export default function StudentCodesPage({
           close={() => setIntent(null)}
           refreshPreview={async () => {
             const latest = await getCodeAudit({ academicYear: intent.snapshot.academicYear, yearPrefix: intent.snapshot.yearPrefix, page: 1, limit: 100, ...(intent.row ? { search: intent.row.studentCode } : {}) });
-            setIntent({ ...intent, snapshot: latest, row: intent.row ? latest.items.find((row) => row.studentCode === intent.row?.studentCode) ?? intent.row : undefined });
+            const row = intent.nextHold ? nextHoldRow(latest) : intent.row ? latest.items.find((row) => row.studentCode === intent.row?.studentCode) ?? intent.row : undefined;
+            if (intent.nextHold && !row) { setIntent(null); return; }
+            setIntent({ ...intent, snapshot: latest, row });
           }}
           save={save}
         />

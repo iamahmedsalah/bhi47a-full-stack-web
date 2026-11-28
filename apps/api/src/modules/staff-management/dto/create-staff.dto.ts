@@ -30,6 +30,14 @@ export class CreateStaffDto {
   @IsMongoId({ each: true })
   courseIds?: string[];
 
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @ArrayMaxSize(100)
+  @IsMongoId({ each: true })
+  gradeEntryCourseIds?: string[];
+
   @ApiPropertyOptional({ enum: ['admin', 'staff'], example: 'staff' })
   @IsOptional()
   @IsIn(['admin', 'staff'])

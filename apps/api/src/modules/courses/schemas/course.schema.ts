@@ -130,6 +130,15 @@ export class Course {
   @Prop({ type: Date })
   syllabusUpdatedAt?: Date;
 
+  @Prop({ type: Types.ObjectId, ref: 'User', select: false })
+  syllabusUploadedBy?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'User', select: false })
+  contentSupervisorId?: Types.ObjectId;
+
+  @Prop({ type: [Types.ObjectId], ref: 'User', default: [], select: false })
+  gradeEntryStaffIds?: Types.ObjectId[];
+
   @Prop({ type: Types.ObjectId, ref: 'User' })
   doctorId?: Types.ObjectId;
 
@@ -222,3 +231,4 @@ CourseSchema.index({ isActive: 1, level: 1, code: 1 });
 CourseSchema.index({ doctorId: 1 });
 CourseSchema.index({ doctorIds: 1 });
 CourseSchema.index({ teachingAssistantIds: 1 });
+CourseSchema.index({ gradeEntryStaffIds: 1 });

@@ -409,4 +409,174 @@ describe('CoursesService Unit Tests', () => {
       );
     });
   });
+
+  describe('updateCourseStaffAccess()', () => {
+    it.each([false, true])(
+      'saves the grant and permissions together for attendance-only assignment %s',
+      async (attendanceOnly) => {
+        const taId = new Types.ObjectId();
+        const docId = new Types.ObjectId(doctorId);
+        const targetCourseId = new Types.ObjectId(courseId);
+        const rev = new Date('2026-11-28T00:00:00.000Z');
+        let currentGradeIds: Types.ObjectId[] = [];
+        const session = {};
+        if (attendanceOnly) {
+          Object.assign(service, {
+            attendanceAssignments: {
+              find: jest.fn(() => ({
+                select: () => ({
+                  session: () => ({
+                    lean: () =>
+                      Promise.resolve([{ staffId: taId, courseCode: 'CS101' }]),
+                  }),
+                }),
+              })),
+            },
+          });
+        }
+        mockCourseModel.db = {
+          transaction: jest.fn(
+            async (work: (session: object) => Promise<unknown>) =>
+              work(session),
+          ),
+        };
+
+        mockCourseModel.findById = jest.fn(() => ({
+          select: jest.fn(() => {
+            const course = {
+              code: 'CS101',
+              _id: targetCourseId,
+              doctorIds: [docId],
+              teachingAssistantIds: attendanceOnly ? [] : [taId],
+              contentSupervisorId: docId,
+              gradeEntryStaffIds: currentGradeIds,
+              toObject: () => ({
+                _id: targetCourseId,
+                doctorIds: [docId],
+                teachingAssistantIds: attendanceOnly ? [] : [taId],
+              }),
+              get: (k: string) => (k === 'updatedAt' ? rev : undefined),
+            };
+            return Object.assign(Promise.resolve(course), {
+              session: jest.fn().mockResolvedValue(course),
+            });
+          }),
+        }));
+        mockCourseModel.updateOne = jest.fn(
+          (
+            _filter: unknown,
+            update: { $set?: { gradeEntryStaffIds?: string[] } },
+          ) => {
+            currentGradeIds = (update.$set?.gradeEntryStaffIds ?? []).map(
+              (id) => new Types.ObjectId(id),
+            );
+            return Promise.resolve({ matchedCount: 1 });
+          },
+        );
+        mockCourseModel.exists = jest.fn(() => ({
+          session: () => ({
+            lean: () =>
+              Promise.resolve(
+                currentGradeIds.length > 0 ? { _id: targetCourseId } : null,
+              ),
+          }),
+        }));
+        mockUserModel.find = jest.fn(() => ({
+          select: jest.fn(() => ({
+            sort: () => ({
+              lean: () =>
+                Promise.resolve([
+                  { _id: docId, name: 'Dr. A', staffType: 'doctor' },
+                  {
+                    _id: taId,
+                    name: 'TA Omar',
+                    staffType: 'teaching_assistant',
+                  },
+                ]),
+            }),
+            session: () => ({
+              lean: () =>
+                Promise.resolve([
+                  { _id: docId, staffType: 'doctor', permissions: [] },
+                  {
+                    _id: taId,
+                    staffType: 'teaching_assistant',
+                    permissions: [],
+                  },
+                ]),
+            }),
+          })),
+        }));
+        mockUserModel.updateOne = jest
+          .fn()
+          .mockResolvedValue({ modifiedCount: 1 });
+
+        const controlOfficer = {
+          _id: new Types.ObjectId().toString(),
+          role: 'staff' as const,
+          staffType: 'control',
+          name: 'Control Officer',
+          permissions: ['control.access', 'control.staff_entry.manage'],
+          mustChangePassword: false,
+          tokenVersion: 1,
+        };
+
+        const granted = await service.updateCourseStaffAccess(
+          courseId,
+          {
+            gradeEntryStaffIds: [String(taId)],
+            revision: rev.toISOString(),
+          },
+          controlOfficer,
+        );
+
+        expect(granted.canEditSupervisor).toBe(false);
+        expect(granted.gradeEntryStaffIds).toEqual([String(taId)]);
+        expect(
+          granted.members.find((m) => m._id === String(docId))
+            ?.isAutoAuthorizedDoctor,
+        ).toBe(true);
+        expect(mockUserModel.updateOne).toHaveBeenCalledWith(
+          { _id: taId },
+          expect.objectContaining({
+            $inc: { controlGradeGrantRevision: 1 },
+            $addToSet: {
+              permissions: {
+                $each: expect.arrayContaining([
+                  'control.access',
+                  'control.grades.enter',
+                ]),
+              },
+            },
+          }),
+          { session },
+        );
+
+        // Closing grade entry revokes TA Control entry permissions when 0 courses remain
+        await service.updateCourseStaffAccess(
+          courseId,
+          {
+            gradeEntryStaffIds: [],
+            revision: rev.toISOString(),
+          },
+          controlOfficer,
+        );
+        expect(mockUserModel.updateOne).toHaveBeenLastCalledWith(
+          { _id: taId },
+          expect.objectContaining({
+            $pull: {
+              permissions: {
+                $in: expect.arrayContaining([
+                  'control.access',
+                  'control.grades.enter',
+                ]),
+              },
+            },
+          }),
+          { session },
+        );
+        expect(mockCourseModel.db.transaction).toHaveBeenCalledTimes(2);
+      },
+    );
+  });
 });

@@ -7,6 +7,7 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import {
   COURSE_326_CURRICULA,
+  PERMISSIONS,
   type Semester,
   type MaterialFileReference,
 } from '@student-portal/shared';
@@ -544,12 +545,18 @@ describe('shared syllabus upload and removal', () => {
     const document = {
       ...course,
       doctorIds: [doctorId],
+      syllabusUploadedBy: doctorId,
+      get: jest.fn(),
       save: jest.fn().mockResolvedValue(undefined),
       syllabusPdfData: 'old-data',
       syllabusFile: undefined as MaterialFileReference | undefined,
     };
     const courses = {
-      findById: jest.fn().mockResolvedValue(document),
+      findById: jest.fn(() =>
+        Object.assign(Promise.resolve(document), {
+          select: jest.fn().mockResolvedValue(document),
+        }),
+      ),
       exists: jest.fn().mockResolvedValue(null),
     };
     const cache = { delPattern: jest.fn().mockResolvedValue(undefined) };
@@ -594,7 +601,8 @@ describe('shared syllabus upload and removal', () => {
     await h.service.uploadSyllabus(course._id.toHexString(), h.file, {
       role: 'staff',
       staffType: 'doctor',
-      _id: h.doctorId,
+      _id: String(h.doctorId),
+      permissions: [PERMISSIONS.COURSES_WRITE],
     });
     expect(h.document.save).toHaveBeenCalledTimes(1);
     expect(h.document.syllabusPdfData).toBeUndefined();

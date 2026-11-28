@@ -21,6 +21,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Unlock,
+  UserCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -50,7 +51,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { FilterBar } from "@/components/ui/filter-bar";
-import { Input } from "@/components/ui/input";
+import { AcademicYearSelect, useAcademicYearOptions } from "@/components/ui/academic-year-select";
 import { HelpNote } from "@/components/ui/help-note";
 import { Label } from "@/components/ui/label";
 import { PageSkeletonLoader } from "@/components/ui/page-suspense-fallback";
@@ -82,6 +83,7 @@ import {
   type WorkflowHistoryTarget,
 } from "@/features/control/components/control-workflow-history-dialog";
 import { GradingSchemeDialog } from "@/features/control/components/grading-scheme-dialog";
+import { CourseStaffAccessDialog } from "@/features/courses/components/course-staff-access-dialog";
 import type { ControlCourseSummary } from "@/features/control/types";
 
 function ControlHomeContent() {
@@ -92,6 +94,7 @@ function ControlHomeContent() {
   const queryClient = useQueryClient();
   const locale = (params?.locale as string) || "ar";
   const isAr = locale === "ar";
+  const years = useAcademicYearOptions();
 
   const {
     search,
@@ -103,8 +106,8 @@ function ControlHomeContent() {
   } = useTableState({
     shallow: true,
     defaultFilters: {
-      academicYear: "2026-2027",
-      semester: "first",
+      academicYear: "",
+      semester: "",
       status: "all",
       component: "midterm",
       level: "all",
@@ -116,8 +119,8 @@ function ControlHomeContent() {
       ? filters.component
       : "midterm"
   ) as ControlComponentKey;
-  const academicYear = filters.academicYear || "2026-2027";
-  const semester = (filters.semester || "first") as Semester;
+  const academicYear = filters.academicYear || years.data?.currentYear || "";
+  const semester = (filters.semester || years.data?.currentSemester || "first") as Semester;
   const level = filters.level || "all";
 
   const { data: caps } = useQuery({
@@ -145,6 +148,8 @@ function ControlHomeContent() {
   const [schemeTarget, setSchemeTarget] = useState<ControlCourseSummary | null>(
     null,
   );
+  const [staffAccessTarget, setStaffAccessTarget] =
+    useState<ControlCourseSummary | null>(null);
   const [bulkLockOpen, setBulkLockOpen] = useState(false);
   const [workflowTarget, setWorkflowTarget] =
     useState<WorkflowHistoryTarget | null>(null);
@@ -153,9 +158,9 @@ function ControlHomeContent() {
     queryKey: controlKeys.petitionsSummary({ academicYear, semester }),
     queryFn: () => getControlPetitionsSummary({ academicYear, semester }),
     enabled: Boolean(
-      caps?.canCreatePetitions ||
+      academicYear && (caps?.canCreatePetitions ||
         caps?.canApprovePetitions ||
-        caps?.scopeAll,
+        caps?.scopeAll),
     ),
   });
   const totalPetitionNotifications =
@@ -734,6 +739,23 @@ function ControlHomeContent() {
                   },
                 ]
               : []),
+            ...(caps?.canManageStaffEntry
+              ? [
+                  {
+                    value: "staff-access",
+                    label: (
+                      <div className="flex items-center gap-2 text-xs py-0.5">
+                        <UserCheck className="h-3.5 w-3.5 text-primary" />
+                        <span>
+                          {isAr
+                            ? "صلاحيات رصد المقرر (الهيئة المعاونة)"
+                            : "Course Grade Entry Access (TAs)"}
+                        </span>
+                      </div>
+                    ),
+                  },
+                ]
+              : []),
           ];
 
           return (
@@ -782,6 +804,8 @@ function ControlHomeContent() {
                         });
                       } else if (val === "scheme") {
                         setSchemeTarget(item);
+                      } else if (val === "staff-access") {
+                        setStaffAccessTarget(item);
                       }
                     }}
                     className="h-8 w-8 min-w-8 p-0 justify-center rounded-squircle border border-border/60 hover:bg-primary/10 [&>svg]:hidden"
@@ -905,13 +929,11 @@ function ControlHomeContent() {
           }
           wrapFilters
         >
-          <div className="w-36">
-            <Input
-              dir="ltr"
+          <div className="w-full sm:w-40">
+            <AcademicYearSelect
               value={academicYear}
-              onChange={(e) => setFilter("academicYear", e.target.value)}
-              placeholder="2026-2027"
-              className="h-10 rounded-squircle text-left font-mono text-xs"
+              onChange={(year) => setFilter("academicYear", year)}
+              showLabel={false}
             />
           </div>
           <div className="w-44">
@@ -1069,6 +1091,21 @@ function ControlHomeContent() {
             academicYear={academicYear}
             semester={semester}
             locale={locale}
+          />
+        )}
+
+        {staffAccessTarget && (
+          <CourseStaffAccessDialog
+            key={staffAccessTarget.courseId}
+            courseId={staffAccessTarget.courseId}
+            courseCode={staffAccessTarget.code}
+            courseTitle={
+              isAr
+                ? staffAccessTarget.nameAr || staffAccessTarget.name
+                : staffAccessTarget.nameEn || staffAccessTarget.name
+            }
+            isAr={isAr}
+            onClose={() => setStaffAccessTarget(null)}
           />
         )}
 

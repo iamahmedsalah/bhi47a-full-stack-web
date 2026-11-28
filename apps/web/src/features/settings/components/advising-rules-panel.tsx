@@ -10,14 +10,12 @@ import {
   CheckCircle2,
   Sliders,
   Layers,
-  HelpCircle,
-  ChevronDown,
-  ChevronUp,
   ShieldAlert,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/providers/auth-provider';
 import { Button } from '@/components/ui/button';
+import { HelpNote } from '@/components/ui/help-note';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
@@ -37,7 +35,6 @@ export function AdvisingRulesPanel({ locale }: { locale: string }) {
     user?.role === 'admin' ||
     Boolean(user?.permissions?.includes('advising.write'));
 
-  const [guideOpen, setGuideOpen] = useState(false);
 
   const rulesQuery = useQuery({
     queryKey: settingsKeys.advisingRules,
@@ -139,18 +136,6 @@ export function AdvisingRulesPanel({ locale }: { locale: string }) {
 
         <div className="grid gap-2 sm:flex sm:flex-wrap sm:items-center">
           <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setGuideOpen((prev) => !prev)}
-            className="h-auto min-h-11 whitespace-normal rounded-squircle px-3 py-2 gap-1.5 text-xs border-primary/30 text-primary hover:bg-primary/10"
-          >
-            <HelpCircle className="h-4 w-4" />
-            <span>{isAr ? 'شرح المحرك الأكاديمي' : 'Engine Guide'}</span>
-            {guideOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-          </Button>
-
-          <Button
             onClick={() => updateMutation.mutate()}
             disabled={!canManage || updateMutation.isPending}
             className="h-auto min-h-11 whitespace-normal rounded-squircle gap-2 px-4 py-2 text-xs font-semibold shadow-md disabled:opacity-50"
@@ -166,13 +151,7 @@ export function AdvisingRulesPanel({ locale }: { locale: string }) {
         </div>
       </div>
 
-      {/* Collapsible Rich Educational Guide */}
-      {guideOpen && (
-        <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 animate-in fade-in-0 duration-300 space-y-3">
-          <div className="font-bold text-xs text-foreground flex items-center gap-2">
-            <Info className="h-4 w-4 text-primary" />
-            <span>{isAr ? 'دليل عمل محرك الإرشاد والتوصية الذكي (Advising Engine Blueprint)' : 'Advising Engine Logic & Policy Guide'}</span>
-          </div>
+      <HelpNote title={isAr ? 'شرح محرك الإرشاد الأكاديمي' : 'Advising Engine Guide'}>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 text-xs">
             <div className="rounded-xl border border-white/10 bg-background/50 p-3 space-y-1">
               <strong className="block text-foreground text-xs font-semibold">
@@ -218,8 +197,7 @@ export function AdvisingRulesPanel({ locale }: { locale: string }) {
               </p>
             </div>
           </div>
-        </div>
-      )}
+      </HelpNote>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         {/* Card 1: Course Allocation & Level Boundary */}

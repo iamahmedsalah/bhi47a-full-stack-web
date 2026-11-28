@@ -31,7 +31,7 @@ export class StudentCodeAllocator {
     createStudent: (
       studentCode: string,
       session: ClientSession,
-    ) => Promise<{ studentId: string }>,
+    ) => Promise<{ studentId: string; protectAssignment?: boolean }>,
     beforeAllocation?: (session: ClientSession) => Promise<void>,
     source: 'admission' | 'import' = 'admission',
   ): Promise<AssignedStudentCode> {
@@ -213,6 +213,7 @@ export class StudentCodeAllocator {
               yearPrefix: prefix,
               status: 'AVAILABLE',
               currentStudentId: { $exists: false },
+              protectedAt: { $exists: false },
               $or: [
                 { 'assignmentHistory.0': { $exists: false } },
                 { reuseAuthorized: true },
@@ -327,7 +328,10 @@ export class StudentCodeAllocator {
             'CODE_ALLOCATION_REVIEW_REQUIRED',
             'Too many conflicting codes. Review this year before retrying.',
           );
-        const { studentId } = await createStudent(chosen, session);
+        const { studentId, protectAssignment } = await createStudent(
+          chosen,
+          session,
+        );
         await this.verifyOwner(studentId, chosen, session);
         const at = new Date();
         const student = new Types.ObjectId(studentId);
@@ -342,6 +346,7 @@ export class StudentCodeAllocator {
               status: 'ASSIGNED',
               currentStudentId: student,
               reuseAuthorized: false,
+              ...(protectAssignment ? { protectedAt: at } : {}),
             },
             $push: {
               assignmentHistory: {

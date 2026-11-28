@@ -1,4 +1,9 @@
 import { ControlReleaseStore } from './control-release.store';
+import {
+  canFinalizeEnrollment,
+  canViewAdmissionResult,
+  provisionalPolicies,
+} from '../admissions/enrollment-policy';
 import { randomUUID } from 'node:crypto';
 import type { ResultPolicy } from '../control/utils/official-result.util';
 import { ConflictException, BadRequestException } from '@nestjs/common';
@@ -382,6 +387,7 @@ export class GradesService implements OnModuleInit {
       const user = userMap.get(studentId);
 
       if (!academic && !studentProfile) return null;
+      if (!canFinalizeEnrollment(studentProfile)) return null;
       const curriculumCourses = coursesForDepartment(
         courses as unknown as CourseDocument[],
         studentProfile?.department,
@@ -650,6 +656,19 @@ export class GradesService implements OnModuleInit {
     if (gradeDoc && gradeDoc.isPublished) {
       await this.syncPublishedAcademicProgress([gradeDoc.studentId]);
       try {
+        const profile = await this.studentProfileModel
+          .findOne({ userId: gradeDoc.studentId })
+          .lean();
+        if (
+          !(await canViewAdmissionResult(
+            this.gradeModel.db,
+            profile,
+            gradeDoc.examType,
+            gradeDoc.academicYear,
+            gradeDoc.semester,
+          ))
+        )
+          return gradeDoc;
         const examTypeLabel =
           dto.examType === 'midterm'
             ? 'منتصف الفصل'
@@ -1368,7 +1387,9 @@ export class GradesService implements OnModuleInit {
           ...filter,
           _id: { $in: legacyAffected.map((grade) => grade._id) },
         })
-        .select('studentCode courseCode')
+        .select(
+          'studentId studentCode courseCode examType academicYear semester',
+        )
         .lean();
 
       const course = dto.courseCode
@@ -1377,6 +1398,19 @@ export class GradesService implements OnModuleInit {
 
       for (const grade of gradesToPublish) {
         try {
+          const profile = await this.studentProfileModel
+            .findOne({ userId: grade.studentId })
+            .lean();
+          if (
+            !(await canViewAdmissionResult(
+              this.gradeModel.db,
+              profile,
+              grade.examType,
+              grade.academicYear,
+              grade.semester,
+            ))
+          )
+            continue;
           const courseName = course?.nameAr || course?.name || grade.courseCode;
           const examTypeLabel =
             dto.examType === 'midterm'
@@ -1519,13 +1553,24 @@ export class GradesService implements OnModuleInit {
     studentLevel: string;
     isLevelPublished: boolean;
     visibilityVersion?: string;
+    provisional?: boolean;
   }> {
     const settings = await this.getGradesSettings();
     const profile = await this.studentProfileModel
       .findOne({ userId: new Types.ObjectId(studentId) })
-      .select('level isBlocked tuitionFeesStatus')
+      .select('level isBlocked tuitionFeesStatus officialEnrollmentStatus')
       .lean();
-    const visibilityVersion = `${settings.visibilityVersion ?? ''}:${profile?.isBlocked === true ? 'blocked' : 'clear'}`;
+    const lastPolicy =
+      profile?.officialEnrollmentStatus === 'PROVISIONAL'
+        ? await provisionalPolicies(this.gradeModel.db).findOne(
+            {},
+            { sort: { updatedAt: -1 } },
+          )
+        : undefined;
+    const admissionVersion = profile?.officialEnrollmentStatus
+      ? `:${profile.officialEnrollmentStatus}:${lastPolicy?.updatedAt?.toISOString() ?? ''}`
+      : '';
+    const visibilityVersion = `${settings.visibilityVersion ?? ''}:${profile?.isBlocked === true ? 'blocked' : 'clear'}${admissionVersion}`;
     const studentLevel = profile?.level || '1';
     const publishedLevels = settings.gradesPublishedLevels ?? [
       '1',
@@ -1601,10 +1646,13 @@ export class GradesService implements OnModuleInit {
 
     return {
       isOpen: true,
-      visibleExamTypes: (['midterm', 'final'] as const).filter((type) =>
-        (
-          settings.gradesPublishedExamTypes ?? STUDENT_RESULT_EXAM_TYPES
-        ).includes(type),
+      provisional: profile?.officialEnrollmentStatus === 'PROVISIONAL',
+      visibleExamTypes: (['midterm', 'final'] as const).filter(
+        (type) =>
+          (type !== 'final' || canFinalizeEnrollment(profile)) &&
+          (
+            settings.gradesPublishedExamTypes ?? STUDENT_RESULT_EXAM_TYPES
+          ).includes(type),
       ),
       openAt: settings.gradesOpenAt,
       closeAt: settings.gradesCloseAt,
@@ -1705,11 +1753,26 @@ export class GradesService implements OnModuleInit {
       .lean();
     const profile = await this.studentProfileModel
       .findOne({ userId: new Types.ObjectId(studentId) })
-      .select('isBlocked')
+      .select('isBlocked officialEnrollmentStatus academicYear semester')
       .lean();
     // Instructor publication is independent of official result visibility.
     // Financial/administrative holds still protect all student grade reads.
-    return profile?.isBlocked ? [] : quizzes;
+    if (profile?.isBlocked) return [];
+    return (
+      await Promise.all(
+        quizzes.map(async (quiz) =>
+          (await canViewAdmissionResult(
+            this.courseQuizModel.db,
+            profile,
+            'quiz',
+            quiz.academicYear,
+            quiz.semester,
+          ))
+            ? quiz
+            : null,
+        ),
+      )
+    ).filter((quiz) => quiz !== null);
   }
 
   private async visibleStudentRows<
@@ -1719,13 +1782,17 @@ export class GradesService implements OnModuleInit {
       academicLevel?: string;
       status?: string;
       grade?: number;
+      academicYear?: string;
+      semester?: string;
     },
   >(studentId: string, rows: T[], examType?: string): Promise<T[]> {
     const [settings, profile] = await Promise.all([
       this.getGradesSettings(),
       this.studentProfileModel
         .findOne({ userId: new Types.ObjectId(studentId) })
-        .select('level studentCode isBlocked')
+        .select(
+          'level studentCode isBlocked officialEnrollmentStatus academicYear semester',
+        )
         .lean(),
     ]);
     // Match the existing tuition administration block, including manual holds.
@@ -1742,19 +1809,50 @@ export class GradesService implements OnModuleInit {
       academicLevel?: string,
     ) =>
       isReleasedGradeVisible(
-        settings,
+        component === 'coursework' &&
+          profile?.officialEnrollmentStatus === 'PROVISIONAL'
+          ? {
+              ...settings,
+              gradesPublishedExamTypes: [
+                ...(settings.gradesPublishedExamTypes ??
+                  STUDENT_RESULT_EXAM_TYPES),
+                'coursework',
+              ],
+            }
+          : settings,
         student,
         { courseCode, examType: component, academicLevel },
         now,
       );
+    const policyByTerm = new Map<string, Promise<boolean>>();
+    const permitted = (row: T) => {
+      const component = examType ?? row.examType ?? '';
+      const key = `${component}:${row.academicYear ?? ''}:${row.semester ?? ''}`;
+      if (!policyByTerm.has(key))
+        policyByTerm.set(
+          key,
+          canViewAdmissionResult(
+            this.gradeModel.db,
+            profile,
+            component,
+            row.academicYear,
+            row.semester,
+          ),
+        );
+      return policyByTerm.get(key)!;
+    };
+    const visibleByAdmission = await Promise.all(rows.map(permitted));
     return rows
       .filter(
-        (row) =>
-          STUDENT_RESULT_EXAM_TYPES.includes(
-            (examType ??
-              row.examType ??
-              '') as import('@student-portal/shared').ExamType,
-          ) &&
+        (row, index) =>
+          visibleByAdmission[index] &&
+          ((profile?.officialEnrollmentStatus === 'PROVISIONAL' &&
+            row.examType === 'coursework') ||
+            STUDENT_RESULT_EXAM_TYPES.includes(
+              (examType ??
+                row.examType ??
+                '') as import('@student-portal/shared').ExamType,
+            )) &&
           visible(
             row.courseCode,
             examType ?? row.examType ?? '',
@@ -1764,6 +1862,9 @@ export class GradesService implements OnModuleInit {
       .map((row) => {
         const publicRow = {
           ...row,
+          ...(profile?.officialEnrollmentStatus === 'PROVISIONAL'
+            ? { provisional: true }
+            : {}),
           attendanceMark: undefined,
           quizzesMark: undefined,
           ...(row.examType === 'midterm'

@@ -245,6 +245,7 @@ export async function updateGradesSettings(
 }
 
 export interface StudentResultsStatusData {
+  provisional?: boolean;
   visibleExamTypes?: Array<"midterm" | "final">;
   visibilityVersion?: string;
   isOpen: boolean;

@@ -125,6 +125,39 @@ describe('Released grade visibility', () => {
     ).not.toHaveLength(0);
   });
 
+  it('applies the provisional quiz policy to the result term and denies archived students', async () => {
+    const term = { academicYear: '2026-2027', semester: 'second' };
+    const quiz = { ...term, isPublished: true, courseCode: '111' };
+    const profile = { officialEnrollmentStatus: 'PROVISIONAL' };
+    const findPolicy = jest
+      .fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue({ quiz: true });
+    const service = Object.assign(
+      Object.create(GradesService.prototype) as GradesService,
+      {
+        courseQuizModel: {
+          find: () => ({
+            sort: () => ({ lean: () => Promise.resolve([quiz]) }),
+          }),
+          db: { db: { collection: () => ({ findOne: findPolicy }) } },
+        },
+        studentProfileModel: {
+          findOne: () => ({
+            select: () => ({ lean: () => Promise.resolve(profile) }),
+          }),
+        },
+      },
+    );
+    const id = '100000000000000000000001';
+    expect(await service.findStudentQuizzes(id)).toEqual([]);
+    expect(await service.findStudentQuizzes(id)).toEqual([quiz]);
+    expect(findPolicy).toHaveBeenCalledWith({ _id: '2026-2027:second' });
+    profile.officialEnrollmentStatus = 'CANCELLED';
+    expect(await service.findStudentQuizzes(id)).toEqual([]);
+    expect(findPolicy).toHaveBeenCalledTimes(2);
+  });
+
   it('limits unscoped grade publication to coursework, midterm and final without touching quizzes', async () => {
     const stop = new Error('stop before writes');
     const find = jest.fn();

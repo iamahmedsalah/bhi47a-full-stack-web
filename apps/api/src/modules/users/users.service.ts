@@ -54,7 +54,7 @@ export class UsersService {
       this.userModel
         .findById(id)
         .select(
-          '_id role staffType titlePrefix name nameAr email phone studentCode googleEmail googleLinkedAt googleLinkPending permissions mustChangePassword tokenVersion isActive lockUntil lockedUntil lastLoginAt lastActiveAt sessionStartedAt lastLogoutAt lastActionRoute lastAction lastActionAr sessionDevice',
+          '_id role staffType titlePrefix name nameAr email phone studentCode googleEmail googleLinkedAt googleLinkPending permissions mustChangePassword tokenVersion isActive admissionArchivedAt lockUntil lockedUntil lastLoginAt lastActiveAt sessionStartedAt lastLogoutAt lastActionRoute lastAction lastActionAr sessionDevice',
         )
         .lean(),
     );
@@ -549,14 +549,17 @@ export class UsersService {
   }
 
   async activateUser(userId: string): Promise<void> {
-    await this.userModel.findByIdAndUpdate(userId, {
-      $set: { isActive: true },
-      $unset: {
-        deactivatedAt: 1,
-        deactivatedBy: 1,
-        deactivationReason: 1,
+    await this.userModel.findOneAndUpdate(
+      { _id: userId, admissionArchivedAt: { $exists: false } },
+      {
+        $set: { isActive: true },
+        $unset: {
+          deactivatedAt: 1,
+          deactivatedBy: 1,
+          deactivationReason: 1,
+        },
       },
-    });
+    );
   }
 
   async countByRole(role: Role): Promise<number> {

@@ -73,6 +73,27 @@ export class RegistrationTermService {
       .lean();
   }
 
+  async academicYearOptions() {
+    const terms = await this.registrationTermModel
+      .find()
+      .select('academicYear semester isCurrent isOpen opensAt closesAt')
+      .sort({ academicYear: -1, semester: 1 })
+      .lean();
+    const currentYear =
+      terms.find((term) => term.isCurrent)?.academicYear ?? null;
+    const currentSemester =
+      terms.find(
+        (term) =>
+          term.academicYear === currentYear &&
+          isRegistrationTermCurrentlyOpen(term),
+      )?.semester ?? null;
+    return {
+      items: [...new Set(terms.map((term) => term.academicYear))],
+      currentYear,
+      currentSemester,
+    };
+  }
+
   async listAcademicYears() {
     const [terms, registrationUsage, advisingUsage] = await Promise.all([
       this.registrationTermModel

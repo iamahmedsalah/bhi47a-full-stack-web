@@ -1,4 +1,9 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  ApiProperty,
+  ApiPropertyOptional,
+  OmitType,
+  PartialType,
+} from '@nestjs/swagger';
 import {
   IsEnum,
   IsNotEmpty,
@@ -9,8 +14,9 @@ import {
   Min,
   Max,
   IsUrl,
+  ValidateIf,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   COURSE_MATERIAL_TYPE_VALUES,
   type CourseMaterialType,
@@ -73,4 +79,32 @@ export class QueryCourseMaterialsDto {
   @IsOptional()
   @IsEnum(COURSE_MATERIAL_TYPE_VALUES)
   type?: CourseMaterialType;
+}
+
+export class UpdateCourseMaterialDto extends PartialType(
+  OmitType(CreateCourseMaterialDto, [
+    'type',
+    'videoUrl',
+    'weekNumber',
+  ] as const),
+  { skipNullProperties: false },
+) {
+  @ValidateIf((_dto, value: unknown) => value !== undefined && value !== '')
+  @IsUrl({
+    protocols: ['https'],
+    require_protocol: true,
+    require_valid_protocol: true,
+    disallow_auth: true,
+  })
+  @MaxLength(2048)
+  videoUrl?: string;
+
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? (value === '' ? null : Number(value)) : value,
+  )
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(20)
+  weekNumber?: number | null;
 }

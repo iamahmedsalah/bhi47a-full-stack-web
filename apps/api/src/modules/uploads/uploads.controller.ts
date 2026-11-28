@@ -6,6 +6,7 @@ import {
   UploadedFile,
   Body,
   BadRequestException,
+  ForbiddenException,
   Param,
   Query,
   Res,
@@ -22,6 +23,8 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { PERMISSIONS } from '@student-portal/shared';
 import { MAX_HTTP_UPLOAD_SIZE_BYTES } from '../../common/constants/platform-limits';
+import type { AuthenticatedUser } from '../auth/types/authenticated-request';
+import { isTeachingStaff } from '../courses/utils/course-staff.util';
 
 const MAX_UPLOAD_SIZE_BYTES = MAX_HTTP_UPLOAD_SIZE_BYTES;
 const ALLOWED_MIME_TYPES = new Set([
@@ -193,7 +196,7 @@ export class UploadsController {
   async uploadFile(
     @UploadedFile() file: any,
     @Body('type') type: string,
-    @CurrentUser('_id') adminId: string,
+    @CurrentUser() actor: AuthenticatedUser,
   ) {
     if (!file) {
       throw new BadRequestException('Please select a file to upload');
@@ -204,10 +207,11 @@ export class UploadsController {
     if (!type) {
       throw new BadRequestException('Please specify file type');
     }
+    this.assertGradeImport(type, actor);
     return this.uploadsService.processUpload(
       file.buffer,
       type,
-      adminId,
+      actor._id,
       file.originalname,
     );
   }
@@ -231,8 +235,21 @@ export class UploadsController {
   })
   async uploadBatch(
     @Body() dto: BatchUploadDto,
-    @CurrentUser('_id') adminId: string,
+    @CurrentUser() actor: AuthenticatedUser,
   ) {
-    return this.uploadsService.processBatchUpload(dto, adminId);
+    this.assertGradeImport(dto.type, actor);
+    return this.uploadsService.processBatchUpload(dto, actor._id);
+  }
+
+  private assertGradeImport(type: string, actor: AuthenticatedUser) {
+    if (
+      type === 'grades' &&
+      actor.role === 'staff' &&
+      isTeachingStaff(actor.staffType)
+    ) {
+      throw new ForbiddenException(
+        'Use the Control workbook to import course grades',
+      );
+    }
   }
 }

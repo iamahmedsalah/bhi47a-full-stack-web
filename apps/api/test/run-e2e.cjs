@@ -1,6 +1,5 @@
 // Fail before importing AppModule: tests must never inherit a live Atlas URI.
 const { spawn, spawnSync } = require('node:child_process');
-const { MongoClient } = require('mongodb');
 const path = require('node:path');
 
 async function main() {
@@ -19,6 +18,7 @@ async function main() {
       'E2E requires a credential-free localhost MongoDB URI ending in -test or -e2e; production connections are prohibited.',
     );
   }
+  const { MongoClient } = require('mongodb');
   const client = new MongoClient(uri, {
     serverSelectionTimeoutMS: 3000,
     connectTimeoutMS: 3000,

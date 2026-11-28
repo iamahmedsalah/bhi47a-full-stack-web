@@ -427,6 +427,48 @@ export class MaterialStorageService implements OnModuleInit {
     );
   }
 
+  async exists(reference?: MaterialFileReference | null): Promise<boolean> {
+    if (!reference?.storageKey) return false;
+    try {
+      const path = this.pathFor(reference.storageKey);
+      const info = await lstat(path);
+      if (
+        !info.isFile() ||
+        info.size !== reference.size ||
+        info.isSymbolicLink()
+      ) {
+        return false;
+      }
+      const [resolvedFile, resolvedRoot] = await Promise.all([
+        realpath(path),
+        realpath(this.root),
+      ]);
+      return resolvedFile === join(resolvedRoot, reference.storageKey);
+    } catch {
+      return false;
+    }
+  }
+
+  async readBuffer(reference: MaterialFileReference): Promise<Buffer> {
+    const path = this.pathFor(reference.storageKey);
+    const info = await lstat(path).catch(() => {
+      this.logger.error('Referenced material file is missing');
+      throw new NotFoundException(
+        'Material file is missing. Contact the administrator.',
+      );
+    });
+    if (
+      !info.isFile() ||
+      info.size !== reference.size ||
+      info.isSymbolicLink() ||
+      (await realpath(path)) !==
+        join(await realpath(this.root), reference.storageKey)
+    ) {
+      throw new NotFoundException('Material file is unavailable');
+    }
+    return readFile(path);
+  }
+
   async deliver(
     reference: MaterialFileReference,
     res: Response,
@@ -447,12 +489,13 @@ export class MaterialStorageService implements OnModuleInit {
         join(await realpath(this.root), reference.storageKey)
     )
       throw new NotFoundException('Material file is unavailable');
+    const inlineExt = extname(reference.originalName).toLowerCase() || '.pdf';
     res.setHeader('Cache-Control', 'private, no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Type', reference.mimeType);
     res.setHeader(
       'Content-Disposition',
-      `${inline ? 'inline' : 'attachment'}; filename="material${inline ? '.pdf' : ''}"; filename*=UTF-8''${encodeURIComponent(reference.originalName).replace(/'/g, '%27')}`,
+      `${inline ? 'inline' : 'attachment'}; filename="material${inline ? inlineExt : ''}"; filename*=UTF-8''${encodeURIComponent(reference.originalName).replace(/'/g, '%27')}`,
     );
     res.setHeader('Accept-Ranges', 'bytes');
     if (this.config.get<string>('MATERIALS_DELIVERY') === 'nginx') {

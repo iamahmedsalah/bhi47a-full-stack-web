@@ -6,6 +6,10 @@ import { User, UserSchema } from '../users/schemas/user.schema';
 import { StaffManagementController } from './staff-management.controller';
 import { StaffManagementService } from './staff-management.service';
 import {
+  CourseStaffAssignment,
+  CourseStaffAssignmentSchema,
+} from '../attendance/schemas/course-staff-assignment.schema';
+import {
   StaffAuditLog,
   StaffAuditLogSchema,
 } from './schemas/staff-audit-log.schema';
@@ -15,6 +19,7 @@ import {
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: Course.name, schema: CourseSchema },
+      { name: CourseStaffAssignment.name, schema: CourseStaffAssignmentSchema },
       { name: StaffAuditLog.name, schema: StaffAuditLogSchema },
     ]),
   ],

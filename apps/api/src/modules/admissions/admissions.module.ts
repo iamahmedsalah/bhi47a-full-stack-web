@@ -12,6 +12,7 @@ import {
 import { AdmissionPeriodsController } from './admission-periods.controller';
 import { AdmissionPeriodsService } from './admission-periods.service';
 import { StudentCodesModule } from '../student-codes/student-codes.module';
+import { RegistrationsModule } from '../registrations/registrations.module';
 import {
   StudentAcademicProfile,
   StudentAcademicProfileSchema,
@@ -31,6 +32,11 @@ import { AdmissionSecurity } from './admission-security.service';
 import { AdmissionWorkflowService } from './admission-workflow.service';
 import { AdmissionSpreadsheets } from './admission-spreadsheets.service';
 import {
+  AdmissionLifecycleController,
+  AdmissionPolicyController,
+} from './admission-lifecycle.controller';
+import { AdmissionLifecycleService } from './admission-lifecycle.service';
+import {
   AdmissionWorkflowController,
   PublicAdmissionsController,
 } from './admission-workflow.controller';
@@ -38,6 +44,7 @@ import {
 @Module({
   imports: [
     StudentCodesModule,
+    RegistrationsModule,
     PasswordHashModule,
     MongooseModule.forFeature([
       { name: AdmissionPeriod.name, schema: AdmissionPeriodSchema },
@@ -55,12 +62,15 @@ import {
     AdmissionPeriodsController,
     AdmissionWorkflowController,
     PublicAdmissionsController,
+    AdmissionLifecycleController,
+    AdmissionPolicyController,
   ],
   providers: [
     AdmissionPeriodsService,
     AdmissionSecurity,
     AdmissionWorkflowService,
     AdmissionSpreadsheets,
+    AdmissionLifecycleService,
   ],
 })
 export class AdmissionsModule implements NestModule {

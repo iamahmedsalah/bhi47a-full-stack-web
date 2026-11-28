@@ -31,6 +31,18 @@ test('automatic VPS deployment retains both validation dependencies', () => {
   assert.match(job, /^    needs: \[validate, docker-validate\]$/m);
 });
 
+test('the shared isolated replica set stays up through every dependent E2E stage', () => {
+  const validation = workflow.slice(workflow.indexOf('\n  validate:\n'), workflow.indexOf('\n  docker-validate:\n'));
+  const start = validation.indexOf('- name: Start isolated admission replica set');
+  const stop = validation.indexOf('- name: Stop isolated admission services');
+  assert.ok(start >= 0 && stop > start);
+  for (const id of ['admissions', 'control', 'api-e2e']) {
+    const stage = validation.indexOf(`\n        id: ${id}\n`);
+    assert.ok(stage > start && stage < stop, `${id} must run while the replica set is up`);
+  }
+  assert.match(validation.slice(stop), /^- name: Stop isolated admission services\n        if: always\(\)/);
+});
+
 test('workflow is VPS-only and contains no Vercel deployment or credentials', () => {
   assert.doesNotMatch(workflow, /vercel/i);
   const jobs = [...workflow.slice(workflow.indexOf('\njobs:\n')).matchAll(/^  ([\w-]+):\n/gm)].map(match => match[1]);

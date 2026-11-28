@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import type { StudentProfile } from '../../students/schemas/student-profile.schema';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import type { ClientSession } from 'mongoose';
@@ -21,6 +22,7 @@ import {
 import type { AuthenticatedUser } from '../../auth/types/authenticated-request';
 import { Course, CourseDocument } from '../../courses/schemas/course.schema';
 import { Grade, GradeDocument } from '../../grades/schemas/grade.schema';
+import { ControlReleaseStore } from '../../grades/control-release.store';
 import { User, UserDocument } from '../../users/schemas/user.schema';
 import {
   CourseRegistration,
@@ -54,6 +56,7 @@ export interface ControlRosterRow extends Partial<ControlEntry> {
   nameAr: string | null;
   /** Has a mark but no approved registration for this course/term. */
   notRegistered: boolean;
+  provisional?: boolean;
   score: number | null;
   status: string | null;
   rev: number;
@@ -323,6 +326,46 @@ export class ControlSheetsService {
     };
   }
 
+  async dashboard(user: AuthenticatedUser, query: ControlTermQueryDto) {
+    const { items } = await this.listCourses(user, query);
+    const official = await new ControlReleaseStore(
+      this.sheetModel.db,
+    ).officialCourseCounts(
+      query.academicYear,
+      query.semester,
+      items.map((item) => new Types.ObjectId(item.courseId)),
+    );
+    const byCourse = new Map(official.map((item) => [String(item._id), item]));
+    return {
+      items: items.flatMap(({ components, ...course }) => {
+        const recorded = components.reduce(
+          (total, item) => total + item.entered,
+          0,
+        );
+        const results = byCourse.get(course.courseId);
+        if (!recorded && !results && !course.rosterCount) return [];
+        return [
+          {
+            ...course,
+            recorded,
+            recordedComponents: components.filter((item) => item.entered > 0)
+              .length,
+            exams: Object.fromEntries(
+              components
+                .filter(({ key }) => key === 'midterm' || key === 'final')
+                .map(({ key, releaseActive, published, passRate }) => [
+                  key,
+                  { published: releaseActive || published > 0, passRate },
+                ]),
+            ),
+            results: results?.results ?? 0,
+            passed: results?.passed ?? 0,
+          },
+        ];
+      }),
+    };
+  }
+
   /** Gets or creates the sheet for a course + term + component. */
   async openSheet(user: AuthenticatedUser, dto: OpenSheetDto) {
     const course = await this.requireCourse(dto.courseId);
@@ -364,6 +407,9 @@ export class ControlSheetsService {
     }
 
     this.access.assertPermission(user, PERMISSIONS.CONTROL_SHEETS_CREATE);
+    if (typeof this.access.assertCourseGradeWrite === 'function') {
+      await this.access.assertCourseGradeWrite(user, course._id);
+    }
     const sheet = await this.sheetModel.findOneAndUpdate(
       filter,
       {
@@ -389,6 +435,10 @@ export class ControlSheetsService {
       sheet.component,
     );
     const caps = this.access.getCapabilities(user);
+    const canWriteGrades = await this.access.canWriteCourseGrades(
+      user,
+      sheet.courseId,
+    );
     const locker = sheet.lockedBy
       ? await this.userModel
           .findById(sheet.lockedBy)
@@ -464,16 +514,17 @@ export class ControlSheetsService {
         passThreshold,
       },
       capabilities: {
-        canGrace: caps.canGrace,
+        canGrace: caps.canGrace && canWriteGrades,
         canManagePassThreshold,
         canEdit:
+          canWriteGrades &&
           !sheet.locked &&
           (isPartialEditing
             ? caps.canEnter || caps.canEditReview
             : workflowState === 'IN_REVIEW'
               ? caps.canEditReview
               : caps.canEnter && ['DRAFT', 'RETURNED'].includes(workflowState)),
-        canEditReview: caps.canEditReview,
+        canEditReview: caps.canEditReview && canWriteGrades,
         canSubmit: caps.canSubmit,
         canReview: caps.canReview,
         canReopen: caps.canReopen && !sheet.locked,
@@ -493,10 +544,10 @@ export class ControlSheetsService {
         canApprovePetitions: caps.canApprovePetitions,
         canApprove: canApproveComponent,
         canApproveFinal: caps.canApproveFinal,
-        canImport: caps.canImport,
+        canImport: caps.canImport && canWriteGrades,
         canExport: caps.canExport,
-        canEditPublished: caps.canEditPublished,
-        canManageStates: caps.canManageStates,
+        canEditPublished: caps.canEditPublished && canWriteGrades,
+        canManageStates: caps.canManageStates && canWriteGrades,
         canLock: caps.canLock && !sheet.locked,
         canUnlock: caps.canUnlock && sheet.locked,
         canManageSchemes: caps.canManageSchemes,
@@ -515,7 +566,14 @@ export class ControlSheetsService {
     const { sheet, course } = await this.requireSheetInScope(user, sheetId);
 
     const [rosterIds, grades] = await Promise.all([
-      this.getRosterStudentIds(course.code, sheet.academicYear, sheet.semester),
+      this.getRosterStudentIds(
+        course.code,
+        sheet.academicYear,
+        sheet.semester,
+        undefined,
+        undefined,
+        true,
+      ),
       this.gradeModel
         .find({
           courseId: sheet.courseId,
@@ -532,8 +590,26 @@ export class ControlSheetsService {
     const gradeByStudent = new Map(grades.map((g) => [String(g.studentId), g]));
 
     const allIds = new Set<string>([...rosterIds, ...gradeByStudent.keys()]);
+    const accountIds = [...allIds].map((id) => new Types.ObjectId(id));
+    const statuses =
+      (await this.registrationModel.db?.db
+        ?.collection<StudentProfile>('student_profiles')
+        .find(
+          {
+            userId: { $in: accountIds },
+            officialEnrollmentStatus: { $in: ['PROVISIONAL', 'CANCELLED'] },
+          },
+          { projection: { userId: 1, officialEnrollmentStatus: 1 } },
+        )
+        .toArray()) ?? [];
+    const enrollment = new Map(
+      statuses.map((profile) => [
+        String(profile.userId),
+        profile.officialEnrollmentStatus,
+      ]),
+    );
     const users = await this.userModel
-      .find({ _id: { $in: [...allIds].map((id) => new Types.ObjectId(id)) } })
+      .find({ _id: { $in: accountIds } })
       .select('name nameAr studentCode')
       .batchSize(500)
       .lean();
@@ -548,7 +624,8 @@ export class ControlSheetsService {
         studentCode: u.studentCode ?? '',
         name: u.name,
         nameAr: u.nameAr ?? null,
-        notRegistered: !rosterIds.has(id),
+        notRegistered: !rosterIds.has(id) || enrollment.get(id) === 'CANCELLED',
+        ...(enrollment.get(id) === 'PROVISIONAL' ? { provisional: true } : {}),
         score: entry?.score ?? null,
         status: entry?.status ?? null,
         rev: entry?.rev ?? 0,
@@ -1186,6 +1263,7 @@ export class ControlSheetsService {
     semester: string,
     studentIds?: Types.ObjectId[],
     session?: ClientSession,
+    includeArchived = false,
   ): Promise<Set<string>> {
     const code = String(courseCode).toUpperCase();
     const rows = await this.registrationModel
@@ -1200,7 +1278,22 @@ export class ControlSheetsService {
       .session(session ?? null)
       .batchSize(500)
       .lean();
-    return new Set(rows.map((r) => String(r.studentId)));
+    const roster = new Set(rows.map((r) => String(r.studentId)));
+    if (!includeArchived && roster.size) {
+      const archived =
+        (await this.registrationModel.db?.db
+          ?.collection<StudentProfile>('student_profiles')
+          .find(
+            {
+              userId: { $in: rows.map((row) => row.studentId) },
+              officialEnrollmentStatus: 'CANCELLED',
+            },
+            { session, projection: { userId: 1 } },
+          )
+          .toArray()) ?? [];
+      for (const student of archived) roster.delete(String(student.userId));
+    }
+    return roster;
   }
 
   async requireSheetInScope(user: AuthenticatedUser, idOrSlug: string) {

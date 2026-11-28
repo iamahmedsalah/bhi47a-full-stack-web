@@ -26,6 +26,7 @@ export interface ControlCapabilities {
   canLock: boolean;
   canUnlock: boolean;
   canManageSchemes: boolean;
+  canManageStaffEntry?: boolean;
   canViewAudit: boolean;
   scopeAll: boolean;
 }
@@ -186,6 +187,7 @@ export interface ControlRosterRow extends ControlEntry {
   name: string;
   nameAr: string | null;
   notRegistered: boolean;
+  provisional?: boolean;
 }
 
 export interface GradeChangeInput {

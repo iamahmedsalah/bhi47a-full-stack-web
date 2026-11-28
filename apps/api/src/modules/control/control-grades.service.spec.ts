@@ -108,6 +108,7 @@ function build(options: {
   const access = {
     assertPermission: jest.fn(),
     assertCourseScope: jest.fn(),
+    assertCourseGradeWrite: jest.fn(),
     getCapabilities: jest.fn(() => ({ ...baseCaps, ...options.caps })),
   } as unknown as ControlAccessService;
   const schemes = {

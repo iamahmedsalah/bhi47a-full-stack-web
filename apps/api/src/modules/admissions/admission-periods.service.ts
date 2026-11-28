@@ -52,6 +52,7 @@ export class AdmissionPeriodsService {
       opensAt: period.opensAt.toISOString(),
       closesAt: period.closesAt.toISOString(),
       isEnabled: period.isEnabled,
+      lifecycleEnabled: period.lifecycleEnabled,
       revision: period.revision,
       status: admissionPeriodStatus(period),
       createdAt: period.createdAt?.toISOString(),
@@ -131,6 +132,7 @@ export class AdmissionPeriodsService {
         nameAr: dto.nameAr || undefined,
         ...window,
         isEnabled: dto.isEnabled ?? false,
+        lifecycleEnabled: dto.lifecycleEnabled ?? false,
         revision: 0,
         history: [
           {
@@ -144,6 +146,7 @@ export class AdmissionPeriodsService {
               nameAr: dto.nameAr,
               ...window,
               isEnabled: dto.isEnabled ?? false,
+              lifecycleEnabled: dto.lifecycleEnabled ?? false,
             },
           },
         ],
@@ -188,6 +191,9 @@ export class AdmissionPeriodsService {
       ...(dto.name !== undefined ? { name: dto.name } : {}),
       ...(dto.nameAr !== undefined ? { nameAr: dto.nameAr } : {}),
       ...(dto.isEnabled !== undefined ? { isEnabled: dto.isEnabled } : {}),
+      ...(dto.lifecycleEnabled !== undefined
+        ? { lifecycleEnabled: dto.lifecycleEnabled }
+        : {}),
     };
     const updated = await this.periods
       .findOneAndUpdate(

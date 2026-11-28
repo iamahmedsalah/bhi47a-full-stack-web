@@ -29,6 +29,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { GlassCard } from '@/components/ui/glass-card';
 import { useAuth } from '@/providers/auth-provider';
+import { AcademicYearSelect } from '@/components/ui/academic-year-select';
 
 interface ExamSchedule {
   _id: string;
@@ -103,7 +104,7 @@ function AdminExamSchedulesManagerContent() {
 
   const [selectedType, setSelectedType] = useState<ExamScheduleType>('final');
   const [title, setTitle] = useState('');
-  const [academicYear, setAcademicYear] = useState('2024-2025');
+  const [academicYear, setAcademicYear] = useState('');
   const [semester, setSemester] = useState<'first' | 'second' | 'summer'>('first');
   const [fileUrl, setFileUrl] = useState('');
   const [previewUrl, setPreviewUrl] = useState('');
@@ -140,7 +141,7 @@ function AdminExamSchedulesManagerContent() {
     }
 
     setTitle('');
-    setAcademicYear('2024-2025');
+    setAcademicYear('');
     setSemester('first');
     setFileUrl('');
     setPreviewUrl('');
@@ -197,6 +198,10 @@ function AdminExamSchedulesManagerContent() {
   const handleSave = async () => {
     setFormError('');
 
+    if (!academicYear) {
+      setFormError(locale === 'ar' ? 'اختر السنة الدراسية' : 'Choose an academic year');
+      return;
+    }
     if (!title.trim()) {
       setFormError(locale === 'ar' ? 'يرجى إدخال عنوان الجدول' : 'Please enter a schedule title');
       return;
@@ -488,12 +493,7 @@ function AdminExamSchedulesManagerContent() {
                 </label>
                 <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={locale === 'ar' ? 'مثال: جدول امتحانات نهاية الفصل' : 'e.g. Final exam schedule'} />
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-foreground">
-                  {locale === 'ar' ? 'السنة الدراسية' : 'Academic year'}
-                </label>
-                <Input value={academicYear} onChange={(event) => setAcademicYear(event.target.value)} dir="ltr" className="text-left" />
-              </div>
+              <AcademicYearSelect value={academicYear} onChange={setAcademicYear} defaultToCurrent disabled={formLoading} />
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-foreground">{locale === 'ar' ? 'الفصل الدراسي' : 'Semester'}</label>
                 <Select value={semester} onValueChange={(value) => setSemester(value as 'first' | 'second' | 'summer')}>

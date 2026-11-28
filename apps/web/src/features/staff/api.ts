@@ -128,6 +128,13 @@ export async function getStaffFormCourses(staffId: string): Promise<StaffAssigne
   return getStaffFormCoursePages(`/admin/staff/${staffId}/courses`);
 }
 
+export async function getStaffGradeEntryCourseIds(staffId: string): Promise<string[]> {
+  const response = await api.get<{ courseIds: string[] }>(
+    `/admin/staff/${staffId}/grade-entry-courses`,
+  );
+  return Array.isArray(response.data?.courseIds) ? response.data.courseIds : [];
+}
+
 async function getStaffFormCoursePages(url: string): Promise<StaffAssignedCourse[]> {
   const courses: StaffAssignedCourse[] = [];
   let page = 1;

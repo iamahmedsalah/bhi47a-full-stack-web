@@ -27,6 +27,7 @@ import {
   publicAdmissionStatus,
   publicAdmissionSubmit,
   publicAdmissionValidate,
+  publicAdmissionCorrection,
 } from "./workflow-api";
 import { AdmissionInput, Field, useAdmissionUI } from "./workflow-ui";
 import { cn } from "@/lib/cn";
@@ -599,6 +600,9 @@ function PublicStatusForm({
 }) {
   const { t, dir, locale } = useAdmissionUI(),
     [result, setResult] = useState<AdmissionStatus | null>(null),
+    [credentials, setCredentials] = useState<{ publicReference: string; secret: string } | null>(null),
+    [correctionCaptcha, setCorrectionCaptcha] = useState(''),
+    [captchaAttempt, setCaptchaAttempt] = useState(0),
     [error, setError] = useState("");
   const schema = z.object({
     publicReference: z
@@ -631,6 +635,7 @@ function PublicStatusForm({
         setResult(null);
         try {
           setResult(await publicAdmissionStatus(values));
+          setCredentials(values);
         } catch (e) {
           setError(getAdmissionErrorMessage(e, t));
         }
@@ -639,6 +644,7 @@ function PublicStatusForm({
   }, [form, initialReference, initialSecret, t]);
 
   return (
+    <>
     <form
       className="space-y-5 rounded-2xl border border-border/60 bg-card/80 p-5 sm:p-8 shadow-sm backdrop-blur-sm max-w-xl mx-auto"
       onSubmit={form.handleSubmit(async (values) => {
@@ -646,6 +652,7 @@ function PublicStatusForm({
         setResult(null);
         try {
           setResult(await publicAdmissionStatus(values));
+          setCredentials(values);
         } catch (e) {
           setError(getAdmissionErrorMessage(e, t));
         }
@@ -730,12 +737,12 @@ function PublicStatusForm({
             </span>
           </div>
 
-          {result.status === "APPROVED" && (
+          {result.status === "APPROVED" && result.ministryStatus !== 'REJECTED' && (
             <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 space-y-2">
               <div className="flex items-center gap-2 font-bold text-sm">
                 <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
                 <span>
-                  {locale === "ar"
+                  {result.officialEnrollmentStatus === 'PROVISIONAL' ? t(`lifecycle.${result.ministryStatus === 'APPROVED' ? 'ready' : 'pending'}`) : locale === "ar"
                     ? "مبروك! تمت الموافقة على طلب الالتحاق الخاص بك"
                     : "Congratulations! Your admission request has been approved"}
                 </span>
@@ -764,6 +771,7 @@ function PublicStatusForm({
               )}
             </div>
           )}
+          {result.ministryStatus === 'REJECTED' && <p className="text-danger">{t('lifecycle.rejected')}</p>}
 
           {result.status === "REJECTED" && (
             <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm space-y-2">
@@ -819,5 +827,22 @@ function PublicStatusForm({
         </div>
       )}
     </form>
+    {result?.correction && credentials && <section className="mx-auto mt-4 max-w-xl space-y-4 rounded-xl border p-4">
+      <h3 className="font-semibold">{t('lifecycle.instructions')}</h3>
+      <p>{result.correction.instructions}</p>
+      <ApplicantForm initial={result.correction.applicant} disabled={!correctionCaptcha} onSave={async ({ nationalId: _nationalId, ...applicant }) => {
+        void _nationalId;
+        try {
+          await publicAdmissionCorrection({ ...credentials, ...applicant, revision: result.correction!.revision, captchaToken: correctionCaptcha });
+          setResult({ publicReference: credentials.publicReference, status: 'PENDING' });
+        } finally {
+          setCorrectionCaptcha('');
+          setCaptchaAttempt((value) => value + 1);
+        }
+      }}>
+        <AdmissionCaptcha onToken={setCorrectionCaptcha} attempt={captchaAttempt} />
+      </ApplicantForm>
+    </section>}
+    </>
   );
 }

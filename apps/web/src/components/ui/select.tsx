@@ -169,6 +169,8 @@ const Select = ({
             ? placeholder
             : selectedText || undefined)
         }
+        triggerId={trigger?.props.id}
+        invalid={trigger?.props['aria-invalid']}
         disabled={disabled ?? trigger?.props.disabled}
         className={cn(
           'w-full',

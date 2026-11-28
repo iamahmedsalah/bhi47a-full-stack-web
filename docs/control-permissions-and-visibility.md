@@ -33,6 +33,23 @@ Existing historical approvals/publications are retained. Administrators can use 
 
 ## Visibility and publication are separate
 
+### Course permissions for teaching staff
+
+Open **Course Permissions** from a course's actions menu in Courses or Control. An administrator can set a content supervisor. An administrator or an authorized Control officer can enable grade entry for assigned teaching assistants and assistant lecturers, including staff assigned through an active attendance record. The grant applies to the course across terms, subject to the staff member's active teaching assignment. Doctors have grade-entry permissions for their assigned courses by default. Administrators manage doctor course assignments and sign-in identity. Staff managers can prepare a doctor account before an administrator assigns its courses.
+
+#### Control hardening plan
+
+1. Apply course and term scope to petition totals, listings, details and decisions. Use the current grant when academic staff submit partial sheets or create petitions.
+2. Restrict doctor assignment and sign-in changes to administrators. Keep Control officers' ability to manage grants for supporting academic staff.
+3. Save course grants and reconcile the matching account permissions in the same transaction. Verify first grant, last revocation, attendance-based assignment and updates from either screen.
+4. Log doctor-backfill outcomes and preserve active sessions. Verify scoped access, denied actions, validation and workflow defaults with the updated tests.
+
+Control reads and revokes existing grants stored as strings or ObjectIds. The grant editor saves the canonical ObjectId. On startup the API restores missing account permissions for existing grants backed by a current course assignment. Local API end-to-end tests use the isolated replica set from `pnpm run test:services` so they can exercise transaction-backed updates.
+
+[Arabic Control role guide](./control-role-map.png)
+
+To stage an upgrade on an existing deployment, set `CONTROL_COURSE_GRADE_GRANTS_ENFORCED=false` on the API while administrators enter approved course grants. Remove the flag or set it to `true` to enforce them. Enforcement is on by default. Verify the approved grants before enabling it. Teaching staff import course marks through the Control workbook. Historical grade import remains available through its administrative workflow.
+
 ### Instructor quizzes are independent
 
 The Grades visibility dialog and publication APIs manage **coursework, midterm and final** results only. Quizzes remain under the course instructor's own publication/release settings. Closing the official results switch, changing its dates or levels, and adding course/student visibility overrides do not hide or reveal quizzes. Bulk official-grade publication no longer updates quiz publication flags, including when no component is selected. Explicit quiz publication or visibility requests through these official-grade endpoints are rejected. Existing quiz publication records are retained; there is no backfill that publishes quizzes.

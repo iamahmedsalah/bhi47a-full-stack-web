@@ -47,6 +47,31 @@ export async function admissionUpdate(id: string, input: unknown) {
   const res = await api.patch(`${base}/requests/${id}`, input);
   return unwrapData(res);
 }
+export async function uploadAdmissionDecision(id: string, file: File) {
+  const form = new FormData();
+  form.append('file', file);
+  return unwrapData<{ documentId: string }>(await api.post(`${base}/requests/${id}/decision-documents`, form));
+}
+
+export async function downloadAdmissionDecision(id: string, documentId: string) {
+  const raw = await api.get(`${base}/requests/${id}/decision-documents/${documentId}`, { responseType: 'blob' });
+  await downloadFileBlob(raw, 'ministry-decision.pdf', 'application/pdf');
+}
+
+export async function publicAdmissionCorrection(input: unknown) {
+  return unwrapData(await api.post('/public/admissions/correction', input));
+}
+export interface ProvisionalPolicy { midterm: boolean; coursework: boolean; quiz: boolean; finalExam: boolean }
+export async function getProvisionalPolicy(academicYear: string, semester: string) {
+  return unwrapData<ProvisionalPolicy>(await api.get(`${base}/provisional-policy`, { params: { academicYear, semester } }));
+}
+export async function updateProvisionalPolicy(input: ProvisionalPolicy & { academicYear: string; semester: string }) {
+  return unwrapData(await api.patch(`${base}/provisional-policy`, input));
+}
+
+export async function getAdmissionEnrollmentSummary() {
+  return unwrapData<Record<'official' | 'active' | 'pending' | 'ready' | 'archived' | 'unverified', number>>(await api.get(`${base}/enrollment-summary`));
+}
 export async function admissionDeleteRequest(
   id: string,
   revision: number,

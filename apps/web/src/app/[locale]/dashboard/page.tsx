@@ -80,6 +80,8 @@ interface StudentProfile {
   gpa?: number;
   isBlocked?: boolean;
   tuitionFeesStatus?: 'paid' | 'unpaid' | 'exempt';
+  officialEnrollmentStatus?: 'PROVISIONAL' | 'ENROLLED' | 'CANCELLED';
+  ministryStatus?: 'PENDING' | 'APPROVED' | 'REJECTED' | 'NOT_REQUIRED';
   blockReason?: string;
 }
 
@@ -103,6 +105,7 @@ export default function StudentDashboard() {
       return ('data' in res.data ? res.data.data : res.data);
     },
     staleTime: 5 * 60 * 1000,
+    refetchInterval: (query) => query.state.data?.officialEnrollmentStatus === 'PROVISIONAL' ? 60_000 : false,
   });
 
   // 2. Attendance History Query (infrequent change)
@@ -284,6 +287,12 @@ export default function StudentDashboard() {
       className="space-y-6 animate-fade-in pb-8"
       dir={locale === "ar" ? "rtl" : "ltr"}
     >
+      {profile?.officialEnrollmentStatus === 'PROVISIONAL' && <section className="rounded-xl border border-warning/30 bg-warning/5 p-4" role="status">
+        <h2 className="font-semibold">{profile.ministryStatus === 'APPROVED'
+          ? (locale === 'ar' ? 'الوزارة وافقت، والقيد قيد الاستكمال' : 'Ministry approved · enrollment pending')
+          : (locale === 'ar' ? 'في انتظار موافقة الوزارة' : 'Awaiting ministry approval')}</h2>
+        <p className="mt-1 text-sm text-muted-foreground">{locale === 'ar' ? 'تابع مع شؤون الطلاب لاستكمال القيد. الخدمات التعليمية المتاحة تقدر تستخدمها من حسابك.' : 'Contact Student Affairs to complete enrollment. You can use the learning services available in your account.'}</p>
+      </section>}
       {/* Blocked Account / Tuition Fees Alert Banner */}
       {profile?.isBlocked && (
         <div className="rounded-2xl border-2 border-rose-500/40 bg-linear-to-r from-rose-500/15 via-rose-500/10 to-rose-500/5 p-4 md:p-5 text-start shadow-lg shadow-rose-950/20 animate-in fade-in slide-in-from-top-2">

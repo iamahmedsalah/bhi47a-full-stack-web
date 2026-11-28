@@ -1,7 +1,7 @@
 import {
   courseStaffFilter,
-  isAssignedToCourse,
-  isTeachingStaff,
+  canReadCourseContent,
+  canManageCourseContent,
 } from '../courses/utils/course-staff.util';
 import {
   Injectable,
@@ -11,7 +11,9 @@ import {
   BadRequestException,
   Optional,
   OnModuleInit,
+  Logger,
 } from '@nestjs/common';
+import { canViewAdmissionResult } from '../admissions/enrollment-policy';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, FilterQuery } from 'mongoose';
 import { Quiz, QuizDocument } from './schemas/quiz.schema';
@@ -94,6 +96,8 @@ import { QueueService } from '../../core/queues/queue.service';
 
 @Injectable()
 export class QuizzesService implements OnModuleInit {
+  private readonly logger = new Logger(QuizzesService.name);
+
   constructor(
     @InjectModel(Quiz.name) private quizModel: Model<QuizDocument>,
     @InjectModel(QuizSubmission.name)
@@ -165,22 +169,8 @@ export class QuizzesService implements OnModuleInit {
       throw new NotFoundException('المقرر الدراسي غير موجود');
     }
 
-    // Permission check: admin OR course doctor OR course teaching assistant OR has QUIZZES_WRITE
-    if (user.role === 'staff') {
-      const isAssigned = isAssignedToCourse(course, user._id);
-      if (isTeachingStaff(user.staffType) && !isAssigned) {
-        throw new ForbiddenException(
-          'يمكنك فقط إنشاء اختبارات للمقررات الدراسية المسندة إليك',
-        );
-      }
-      const hasWritePerm = user.permissions?.includes(
-        PERMISSIONS.QUIZZES_WRITE,
-      );
-      if (!isAssigned && !hasWritePerm) {
-        throw new ForbiddenException(
-          'غير مصرح لك بإنشاء اختبار لهذا المقرر (يجب أن تكون أستاذ المقرر أو معيده أو تمتلك صلاحية)',
-        );
-      }
+    if (!canReadCourseContent(course, user)) {
+      throw new ForbiddenException('Course is outside your assigned scope');
     }
 
     const totalMarks = validateRandomization({
@@ -277,23 +267,13 @@ export class QuizzesService implements OnModuleInit {
     const { page, limit, skip } = buildPaginationOptions(query);
     const filter: FilterQuery<QuizDocument> = {};
 
-    // If doctor, teaching assistant or staff without full permissions, restrict to assigned courses or created quizzes
-    if (
-      user.role === 'staff' &&
-      (isTeachingStaff(user.staffType) ||
-        !user.permissions?.includes(PERMISSIONS.QUIZZES_WRITE))
-    ) {
+    if (user.role === 'staff') {
       const assignedCourses = await this.courseModel
-        .find({
-          ...courseStaffFilter(String(user._id)),
-        })
+        .find(courseStaffFilter(String(user._id)))
         .select('_id')
         .lean();
-      const courseIds = assignedCourses.map((c) => c._id);
-
-      filter.$or = [
-        { creatorId: new Types.ObjectId(user._id) },
-        { courseId: { $in: courseIds } },
+      filter.$and = [
+        { courseId: { $in: assignedCourses.map((course) => course._id) } },
       ];
     }
 
@@ -343,7 +323,9 @@ export class QuizzesService implements OnModuleInit {
       courseIds.length > 0
         ? this.courseModel
             .find({ _id: { $in: courseIds } })
-            .select('_id name nameAr nameEn code')
+            .select(
+              '_id name nameAr nameEn code doctorId doctorIds doctors teachingAssistantId teachingAssistant teachingAssistantIds teachingAssistants +contentSupervisorId',
+            )
             .lean()
         : Promise.resolve([]),
     ]);
@@ -354,9 +336,12 @@ export class QuizzesService implements OnModuleInit {
       const course = q.courseId
         ? coursesMap.get(q.courseId.toString())
         : undefined;
+      const canEdit = this.canManageQuiz(course, user, q.creatorId);
       return {
         ...q,
         ...getQuizReleaseState(q),
+        canEdit,
+        canDelete: canEdit,
         resultsReleaseMode: q.resultsReleaseMode ?? 'manual',
         reviewReleaseMode: q.reviewReleaseMode ?? 'manual',
         courseNameAr: q.courseNameAr || course?.nameAr || q.courseName,
@@ -383,9 +368,74 @@ export class QuizzesService implements OnModuleInit {
     return quiz;
   }
 
-  managementView(quiz: QuizDocument) {
+  private canManageQuiz(
+    course: { contentSupervisorId?: Types.ObjectId } | null | undefined,
+    user: AuthenticatedUser,
+    creatorId?: Types.ObjectId,
+  ) {
+    return (
+      user.role === 'admin' ||
+      Boolean(
+        course &&
+        canManageCourseContent(
+          course,
+          user,
+          creatorId,
+          PERMISSIONS.QUIZZES_WRITE,
+        ),
+      )
+    );
+  }
+
+  private async managementCourse(
+    quiz: QuizDocument,
+    user: AuthenticatedUser,
+    write = false,
+  ) {
+    if (user.role === 'admin') return null;
+    const course = await this.courseModel
+      .findById(quiz.courseId)
+      .select('+contentSupervisorId')
+      .lean();
+    if (
+      !canReadCourseContent(course, user) ||
+      (write && !this.canManageQuiz(course, user, quiz.creatorId))
+    ) {
+      throw new ForbiddenException(
+        'You cannot access this quiz for the requested operation',
+      );
+    }
+    return course;
+  }
+
+  private logQuizChange(
+    quiz: QuizDocument,
+    user: AuthenticatedUser,
+    action: string,
+  ) {
+    if (String(quiz.creatorId) === String(user._id)) return;
+    this.logger.log(
+      JSON.stringify({
+        action,
+        quizId: String(quiz._id),
+        courseId: String(quiz.courseId),
+        actorId: user._id,
+        ownerId: quiz.creatorId,
+      }),
+    );
+  }
+
+  async getManagementQuiz(id: string, user: AuthenticatedUser) {
+    return this.managementView(await this.findOne(id), user);
+  }
+
+  async managementView(quiz: QuizDocument, user: AuthenticatedUser) {
+    const course = await this.managementCourse(quiz, user);
+    const canEdit = this.canManageQuiz(course, user, quiz.creatorId);
     return {
       ...quiz.toObject(),
+      canEdit,
+      canDelete: canEdit,
       ...getQuizReleaseState(quiz),
       resultsReleaseMode: quiz.resultsReleaseMode ?? 'manual',
       reviewReleaseMode: quiz.reviewReleaseMode ?? 'manual',
@@ -416,30 +466,7 @@ export class QuizzesService implements OnModuleInit {
   ): Promise<QuizDocument> {
     const quiz = await this.findOne(id);
 
-    // Permission check
-    if (user.role === 'staff') {
-      const isCreator = quiz.creatorId
-        ? quiz.creatorId.toString() === user._id.toString()
-        : false;
-      const course = await this.courseModel
-        .findById(quiz.courseId)
-        .select(
-          'doctorId doctorIds doctors teachingAssistantIds teachingAssistants teachingAssistantId teachingAssistant',
-        )
-        .lean();
-      const isAssigned = isAssignedToCourse(course, user._id);
-      if (isTeachingStaff(user.staffType) && !isCreator && !isAssigned) {
-        throw new ForbiddenException(
-          'يمكنك فقط تعديل الاختبارات للمقررات المسندة إليك',
-        );
-      }
-      const hasWritePerm = user.permissions?.includes(
-        PERMISSIONS.QUIZZES_WRITE,
-      );
-      if (!isCreator && !isAssigned && !hasWritePerm) {
-        throw new ForbiddenException('غير مصرح لك بتعديل هذا الاختبار');
-      }
-    }
+    await this.managementCourse(quiz, user, true);
 
     const updatePayload: Record<string, any> = { ...dto };
     delete updatePayload.courseId;
@@ -576,6 +603,7 @@ export class QuizzesService implements OnModuleInit {
         );
     }
 
+    this.logQuizChange(quiz, user, 'quiz.update');
     return updated;
   }
 
@@ -584,36 +612,14 @@ export class QuizzesService implements OnModuleInit {
     user: AuthenticatedUser,
   ): Promise<{ message: string }> {
     const quiz = await this.findOne(id);
-
-    if (user.role === 'staff') {
-      const isCreator = quiz.creatorId
-        ? quiz.creatorId.toString() === user._id.toString()
-        : false;
-      const course = await this.courseModel
-        .findById(quiz.courseId)
-        .select(
-          'doctorId doctorIds doctors teachingAssistantIds teachingAssistants teachingAssistantId teachingAssistant',
-        )
-        .lean();
-      const isAssigned = isAssignedToCourse(course, user._id);
-      if (isTeachingStaff(user.staffType) && !isCreator && !isAssigned) {
-        throw new ForbiddenException(
-          'يمكنك فقط حذف الاختبارات للمقررات المسندة إليك',
-        );
-      }
-      const hasWritePerm = user.permissions?.includes(
-        PERMISSIONS.QUIZZES_WRITE,
-      );
-      if (!isCreator && !isAssigned && !hasWritePerm) {
-        throw new ForbiddenException('غير مصرح لك بحذف هذا الاختبار');
-      }
-    }
+    await this.managementCourse(quiz, user, true);
 
     await Promise.all([
       this.quizModel.findByIdAndDelete(id),
       this.submissionModel.deleteMany({ quizId: new Types.ObjectId(id) }),
       this.attemptModel.deleteMany({ quizId: new Types.ObjectId(id) }),
     ]);
+    this.logQuizChange(quiz, user, 'quiz.delete');
 
     if (this.cacheService) {
       await this.cacheService.del(`quiz:manifest:${id}`);
@@ -647,23 +653,7 @@ export class QuizzesService implements OnModuleInit {
     }>
   > {
     const quiz = await this.findOne(quizId);
-    if (user && user.role === 'staff' && isTeachingStaff(user.staffType)) {
-      const isCreator = quiz.creatorId
-        ? quiz.creatorId.toString() === user._id.toString()
-        : false;
-      const course = await this.courseModel
-        .findById(quiz.courseId)
-        .select(
-          'doctorId doctorIds doctors teachingAssistantIds teachingAssistants teachingAssistantId teachingAssistant',
-        )
-        .lean();
-      const isAssigned = isAssignedToCourse(course, user._id);
-      if (!isCreator && !isAssigned) {
-        throw new ForbiddenException(
-          'غير مصرح لك بالاطلاع على تسليمات هذا الاختبار',
-        );
-      }
-    }
+    if (user) await this.managementCourse(quiz, user);
     const submissions = await this.submissionModel
       .find({ quizId: new Types.ObjectId(quizId) })
       .sort({ submittedAt: -1 })
@@ -714,21 +704,6 @@ export class QuizzesService implements OnModuleInit {
 
   async exportQuizAnalysis(quizId: string, user: AuthenticatedUser) {
     const quiz = await this.findOne(quizId);
-    if (user.role === 'staff' && isTeachingStaff(user.staffType)) {
-      const isCreator = quiz.creatorId
-        ? quiz.creatorId.toString() === user._id.toString()
-        : false;
-      const course = await this.courseModel
-        .findById(quiz.courseId)
-        .select(
-          'doctorId doctorIds doctors teachingAssistantIds teachingAssistants teachingAssistantId teachingAssistant',
-        )
-        .lean();
-      const isAssigned = isAssignedToCourse(course, user._id);
-      if (!isCreator && !isAssigned) {
-        throw new ForbiddenException('غير مصرح لك بتصدير تحليل هذا الاختبار');
-      }
-    }
     const submissions = await this.getSubmissions(quizId, user);
 
     return this.excelService.generateQuizAnalysisExcel(
@@ -815,7 +790,7 @@ export class QuizzesService implements OnModuleInit {
         isPublished: true,
       })
       .select(
-        '_id title titleAr description courseId courseCode courseName courseNameAr courseNameEn creatorName isPublished durationMinutes totalMarks passingMarks startsAt endsAt allowResume allowReview publishResults resultsReleaseMode reviewReleaseMode randomizeQuestions mcqCount trueFalseCount questions.id',
+        '_id title titleAr description courseId courseCode courseName courseNameAr courseNameEn creatorName academicYear semester isPublished durationMinutes totalMarks passingMarks startsAt endsAt allowResume allowReview publishResults resultsReleaseMode reviewReleaseMode randomizeQuestions mcqCount trueFalseCount questions.id',
       )
       .sort({ createdAt: -1 })
       .lean();
@@ -850,57 +825,81 @@ export class QuizzesService implements OnModuleInit {
 
     const nowMs = Date.now();
 
-    return quizzes.map((quiz) => {
-      const qIdStr = quiz._id.toString();
-      const submission = submissionsMap.get(qIdStr);
-      const attempt = attemptsMap.get(qIdStr);
-      const startsAtMs = quiz.startsAt ? new Date(quiz.startsAt).getTime() : 0;
-      const isStarted = !startsAtMs || startsAtMs <= nowMs;
-      const { isEnded, resultsAvailable, reviewAvailable } =
-        getQuizReleaseState(quiz, nowMs);
-      const isOpen = isStarted && !isEnded;
+    const profile = await this.admissionProfile(studentUserId);
+    const policyByTerm = new Map<string, Promise<boolean>>();
+    return Promise.all(
+      quizzes.map(async (quiz) => {
+        const qIdStr = quiz._id.toString();
+        const submission = submissionsMap.get(qIdStr);
+        const attempt = attemptsMap.get(qIdStr);
+        const startsAtMs = quiz.startsAt
+          ? new Date(quiz.startsAt).getTime()
+          : 0;
+        const isStarted = !startsAtMs || startsAtMs <= nowMs;
+        const release = getQuizReleaseState(quiz, nowMs);
+        const { isEnded } = release;
+        const term = `${quiz.academicYear ?? ''}:${quiz.semester ?? ''}`;
+        if (!policyByTerm.has(term))
+          policyByTerm.set(
+            term,
+            canViewAdmissionResult(
+              this.quizModel.db,
+              profile,
+              'quiz',
+              quiz.academicYear,
+              quiz.semester,
+            ),
+          );
+        const allowed = await policyByTerm.get(term)!;
+        const resultsAvailable = release.resultsAvailable && allowed;
+        const reviewAvailable = release.reviewAvailable && allowed;
+        const isOpen = isStarted && !isEnded;
 
-      return {
-        _id: quiz._id,
-        title: quiz.title,
-        titleAr: quiz.titleAr,
-        description: quiz.description,
-        courseId: quiz.courseId,
-        courseCode: quiz.courseCode,
-        courseName: quiz.courseName,
-        courseNameAr: quiz.courseNameAr,
-        courseNameEn: quiz.courseNameEn,
-        creatorName: quiz.creatorName,
-        durationMinutes: quiz.durationMinutes,
-        totalMarks: quiz.totalMarks,
-        passingMarks: quiz.passingMarks,
-        questionsCount: quiz.randomizeQuestions
-          ? (quiz.mcqCount ?? 5) + (quiz.trueFalseCount ?? 5)
-          : quiz.questions?.length || 0,
-        startsAt: quiz.startsAt,
-        endsAt: quiz.endsAt,
-        allowResume: quiz.allowResume !== false,
-        allowReview: Boolean(quiz.allowReview ?? true),
-        resultsReleaseMode: quiz.resultsReleaseMode ?? 'manual',
-        reviewReleaseMode: quiz.reviewReleaseMode ?? 'manual',
-        publishResults: resultsAvailable,
-        canReview: reviewAvailable && Boolean(submission),
-        isOpen,
-        isEnded,
-        isSubmitted: Boolean(submission),
-        attemptStatus: attempt?.status,
-        submission: submission
-          ? {
-              score: resultsAvailable ? submission.score : undefined,
-              totalMarks: submission.totalMarks,
-              percentage: resultsAvailable ? submission.percentage : undefined,
-              isPassed: resultsAvailable ? submission.isPassed : undefined,
-              submittedAt: submission.submittedAt,
-              durationSeconds: submission.durationSeconds,
-            }
-          : undefined,
-      };
-    });
+        return {
+          _id: quiz._id,
+          title: quiz.title,
+          titleAr: quiz.titleAr,
+          description: quiz.description,
+          courseId: quiz.courseId,
+          courseCode: quiz.courseCode,
+          courseName: quiz.courseName,
+          courseNameAr: quiz.courseNameAr,
+          courseNameEn: quiz.courseNameEn,
+          creatorName: quiz.creatorName,
+          durationMinutes: quiz.durationMinutes,
+          totalMarks: quiz.totalMarks,
+          passingMarks: quiz.passingMarks,
+          questionsCount: quiz.randomizeQuestions
+            ? (quiz.mcqCount ?? 5) + (quiz.trueFalseCount ?? 5)
+            : quiz.questions?.length || 0,
+          startsAt: quiz.startsAt,
+          endsAt: quiz.endsAt,
+          allowResume: quiz.allowResume !== false,
+          allowReview: Boolean(quiz.allowReview ?? true),
+          resultsReleaseMode: quiz.resultsReleaseMode ?? 'manual',
+          reviewReleaseMode: quiz.reviewReleaseMode ?? 'manual',
+          publishResults: resultsAvailable,
+          provisional: profile?.officialEnrollmentStatus === 'PROVISIONAL',
+          canReview: reviewAvailable && Boolean(submission),
+          isOpen,
+          isEnded,
+          isSubmitted: Boolean(submission),
+          attemptStatus: attempt?.status,
+          submission: submission
+            ? {
+                score: resultsAvailable ? submission.score : undefined,
+                totalMarks: submission.totalMarks,
+                percentage: resultsAvailable
+                  ? submission.percentage
+                  : undefined,
+                isPassed: resultsAvailable ? submission.isPassed : undefined,
+                submittedAt: submission.submittedAt,
+                durationSeconds: submission.durationSeconds,
+              }
+            : undefined,
+        };
+      }),
+    );
   }
 
   async getQuizForTaking(quizId: string, studentUserId: string) {
@@ -1294,7 +1293,11 @@ export class QuizzesService implements OnModuleInit {
           maxAllowedExits: 1,
           message:
             'تم إنهاء الاختبار وتسليمه تلقائياً بسبب تكرار مغادرة الصفحة أو تبديل التبويب (الوضع المشدد)',
-          submission: this.studentSubmissionView(quiz, submission),
+          submission: await this.studentSubmissionView(
+            quiz,
+            submission,
+            studentUserId,
+          ),
         };
       }
 
@@ -1480,17 +1483,30 @@ export class QuizzesService implements OnModuleInit {
       throw err;
     }
 
-    return this.studentSubmissionView(quiz, {
-      score: totalScore,
-      totalMarks,
-      percentage,
-      isPassed,
-      submittedAt,
-      answers: gradedAnswers,
-    });
+    return this.studentSubmissionView(
+      quiz,
+      {
+        score: totalScore,
+        totalMarks,
+        percentage,
+        isPassed,
+        submittedAt,
+        answers: gradedAnswers,
+      },
+      studentUserId,
+    );
   }
 
-  private studentSubmissionView(
+  private admissionProfile(studentId: string) {
+    return this.studentProfileModel
+      ?.findOne(
+        { userId: new Types.ObjectId(studentId) },
+        'officialEnrollmentStatus academicYear semester',
+      )
+      .lean();
+  }
+
+  private async studentSubmissionView(
     quiz: QuizDocument,
     submission: Pick<
       QuizSubmission,
@@ -1501,9 +1517,19 @@ export class QuizzesService implements OnModuleInit {
       | 'submittedAt'
       | 'answers'
     >,
+    studentId: string,
   ) {
-    const { resultsAvailable: showScore, reviewAvailable } =
-      getQuizReleaseState(quiz);
+    const release = getQuizReleaseState(quiz);
+    const profile = await this.admissionProfile(studentId);
+    const allowed = await canViewAdmissionResult(
+      this.quizModel.db,
+      profile,
+      'quiz',
+      quiz.academicYear,
+      quiz.semester,
+    );
+    const showScore = release.resultsAvailable && allowed;
+    const reviewAvailable = release.reviewAvailable && allowed;
     return {
       message: showScore
         ? 'تم تسليم الاختبار وتصحيحه بنجاح'
@@ -1513,6 +1539,7 @@ export class QuizzesService implements OnModuleInit {
       percentage: showScore ? submission.percentage : undefined,
       isPassed: showScore ? submission.isPassed : undefined,
       publishResults: showScore,
+      provisional: profile?.officialEnrollmentStatus === 'PROVISIONAL',
       canReview: reviewAvailable,
       submittedAt: submission.submittedAt,
       answers: reviewAvailable ? submission.answers : undefined,
@@ -1672,7 +1699,17 @@ export class QuizzesService implements OnModuleInit {
     }
 
     const { reviewAvailable } = getQuizReleaseState(quiz);
-    if (!reviewAvailable) {
+    const profile = await this.admissionProfile(studentUserId);
+    if (
+      !reviewAvailable ||
+      !(await canViewAdmissionResult(
+        this.quizModel.db,
+        profile,
+        'quiz',
+        quiz.academicYear,
+        quiz.semester,
+      ))
+    ) {
       throw new ForbiddenException(
         'مراجعة أسئلة وإجابات هذا الاختبار غير مفعلة من قِبل المدرس',
       );

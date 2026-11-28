@@ -20,6 +20,7 @@ import {
   ArrowUpToLine,
   Bell,
   Calculator,
+  CircleAlert,
   Download,
   FileCheck2,
   FileEdit,
@@ -32,6 +33,7 @@ import {
   MoreVertical,
   Loader2,
   Search,
+  Save,
   Trash2,
   Send,
   CheckCircle2,
@@ -133,6 +135,7 @@ type Draft = GradeChangeInput & {
 // Keep unsaved work across SPA back/forward navigation in this tab. Never share
 // drafts between authenticated principals, or persist grade drafts to disk.
 const EMPTY_ROWS: WorkbookRow[] = [];
+const NOT_ENTERED = "not_entered";
 const draftArchive = new Map<string, Record<string, Draft>>();
 interface Props {
   canPublish?: boolean;
@@ -732,6 +735,19 @@ export function ControlWorkbookGrid({
     );
   }
   const pending = Object.keys(drafts).length > 0;
+  const saveState = saving
+    ? "saving"
+    : failed
+      ? "saveFailed"
+      : pending
+        ? "unsaved"
+        : "saved";
+  const SaveStateIcon = {
+    saving: Loader2,
+    saveFailed: CircleAlert,
+    unsaved: Save,
+    saved: CheckCircle2,
+  }[saveState];
   useEffect(() => {
     onPendingChange?.(pending);
   }, [pending, onPendingChange]);
@@ -886,14 +902,17 @@ export function ControlWorkbookGrid({
                 const entry = accepted.get(row.studentId);
                 if (!entry) return row;
                 const draft = sent.get(row.studentId);
-                const scoreless = (
-                  CONTROL_SCORELESS_STATES as readonly string[]
-                ).includes(entry.status ?? "");
+                const scoreless =
+                  entry.status === null ||
+                  (CONTROL_SCORELESS_STATES as readonly string[]).includes(
+                    entry.status,
+                  );
                 const components = {
                   ...row.components,
                   [key]: {
                     ...row.components[key],
                     ...entry,
+                    ...(entry.status === null ? { isApproved: false } : {}),
                     attendanceMark:
                       key === "coursework"
                         ? scoreless
@@ -931,6 +950,10 @@ export function ControlWorkbookGrid({
         });
         void query.invalidateQueries({
           queryKey: ["control", "courses"],
+          refetchType: "none",
+        });
+        void query.invalidateQueries({
+          queryKey: ["control", "dashboard"],
           refetchType: "none",
         });
       }
@@ -994,9 +1017,12 @@ export function ControlWorkbookGrid({
   ) {
     if (!canEditRow(row)) return;
     const prior = row.components[key];
+    const clearRequested = field === "status" && value === NOT_ENTERED;
+    const saveInProgress = inFlight.current;
     setFailed(false);
     setErrors((current) => ({ ...current, [row.studentId]: "" }));
     setDrafts((current) => {
+      const previous = current[row.studentId];
       const initial: Draft = {
         studentId: row.studentId,
         expectedRev: prior?.rev ?? 0,
@@ -1008,11 +1034,51 @@ export function ControlWorkbookGrid({
         status: prior?.status as GradeStatus | undefined,
       };
       const next: Draft = {
-        ...(current[row.studentId] ?? initial),
+        ...(previous ?? initial),
         [field]: value,
         reason: reason.trim() || undefined,
       };
       next.opId = crypto.randomUUID();
+      const blankMark =
+        key === "coursework"
+          ? field !== "status" && !next.attendance.trim() && !next.quizzes.trim()
+          : field === "raw" && !value.trim();
+      const effectiveStatus = previous ? previous.status : prior?.status;
+      const clearing =
+        clearRequested ||
+        (blankMark &&
+          !(CONTROL_SCORELESS_STATES as readonly string[]).includes(
+            effectiveStatus ?? "",
+          ));
+      if (clearing) {
+        if (
+          !caps.canManageStates &&
+          (CONTROL_RESTRICTED_STATES as readonly string[]).includes(
+            prior?.status ?? "",
+          )
+        ) return current;
+        if (!prior?.status && !saveInProgress) {
+          if (!previous) return current;
+          const remaining = { ...current };
+          delete remaining[row.studentId];
+          return remaining;
+        }
+        return {
+          ...current,
+          [row.studentId]: {
+            ...next,
+            status: undefined,
+            score: null,
+            raw: "",
+            attendance: "",
+            quizzes: "",
+            attendanceMark: undefined,
+            quizzesMark: undefined,
+            error: undefined,
+          },
+        };
+      }
+      if (blankMark) return current;
       let parsed = parseMarkInput(next.raw);
       if (key === "coursework") {
         const a = parseMarkInput(next.attendance),
@@ -1239,7 +1305,7 @@ export function ControlWorkbookGrid({
     const entry = row.components[component],
       draft = drafts[row.studentId];
     const effectiveStatus =
-      component === key ? (draft?.status ?? entry?.status) : entry?.status;
+      component === key && draft ? draft.status : entry?.status;
     const scoreless = (CONTROL_SCORELESS_STATES as readonly string[]).includes(
       effectiveStatus ?? "",
     );
@@ -1710,15 +1776,23 @@ export function ControlWorkbookGrid({
             </span>
           </Button>
         ))}
-        <span className="ms-auto text-xs" role="status" aria-live="polite">
+        <span
+          className="ms-auto inline-flex items-center gap-1.5 text-xs"
+          role="status"
+          aria-live="polite"
+        >
+          <SaveStateIcon
+            className={cn(
+              "size-4 shrink-0",
+              saveState === "saving" && "text-primary motion-safe:animate-spin",
+              saveState === "saveFailed" && "text-danger",
+              saveState === "unsaved" && "text-warning",
+              saveState === "saved" && "text-emerald-500",
+            )}
+            aria-hidden="true"
+          />
           {t(`workflow.${sheet.workflowState}`)} ·{" "}
-          {saving
-            ? t("saving")
-            : failed
-              ? t("saveFailed")
-              : pending
-                ? t("unsaved")
-                : t("saved")}
+          {t(saveState)}
         </span>
         {(failed || pending) && (
           <Button
@@ -2989,9 +3063,9 @@ export function ControlWorkbookGrid({
                 <td className="p-2">
                   <Select
                     value={
-                      drafts[row.studentId]?.status ||
-                      row.components[key]?.status ||
-                      "not_entered"
+                      (drafts[row.studentId]
+                        ? drafts[row.studentId].status
+                        : row.components[key]?.status) ?? NOT_ENTERED
                     }
                     disabled={!canEditRow(row)}
                     onValueChange={(value) => edit(row, "status", value)}
@@ -3002,7 +3076,15 @@ export function ControlWorkbookGrid({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent dir={rtl ? "rtl" : "ltr"}>
-                      <SelectItem value="not_entered" disabled>
+                      <SelectItem
+                        value={NOT_ENTERED}
+                        disabled={
+                          !caps.canManageStates &&
+                          (CONTROL_RESTRICTED_STATES as readonly string[]).includes(
+                            row.components[key]?.status ?? "",
+                          )
+                        }
+                      >
                         {t("notEntered")}
                       </SelectItem>
                       {key === "midterm" &&

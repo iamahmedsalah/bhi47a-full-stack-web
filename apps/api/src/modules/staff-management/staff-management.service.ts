@@ -5,7 +5,10 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
+  BadRequestException,
   NotFoundException,
+  OnModuleInit,
   Optional,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -28,8 +31,11 @@ import {
   StaffAuditLogDocument,
 } from './schemas/staff-audit-log.schema';
 import {
+  DOCTOR_CONTROL_DEFAULT_PERMISSIONS,
   STAFF_TYPE_DEFAULT_PERMISSIONS,
   inferDoctorPrefix,
+  isAcademicTeachingStaff,
+  isSupportingAcademicStaff,
   type StaffType,
   type DoctorPrefix,
 } from '@student-portal/shared';
@@ -91,7 +97,8 @@ function isDuplicateKeyError(error: unknown): error is { code: number } {
 }
 
 @Injectable()
-export class StaffManagementService {
+export class StaffManagementService implements OnModuleInit {
+  private readonly logger = new Logger(StaffManagementService.name);
   constructor(
     @InjectModel(User.name) private readonly users: Model<UserDocument>,
     @InjectModel(StaffAuditLog.name)
@@ -102,6 +109,59 @@ export class StaffManagementService {
     private readonly courseAssignments?: StaffCourseAssignmentsService,
     @Optional() private readonly cache?: CacheService,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    await this.ensureExistingDoctorsControlPermissions();
+    if (!this.courseAssignments) return;
+    try {
+      const count = await this.courseAssignments.restoreStoredCourseGrants(
+        this.users,
+      );
+      if (count)
+        this.logger.log(
+          `Checked ${count} stored Control grants for missing permissions`,
+        );
+    } catch (error) {
+      this.logger.error(
+        'Stored Control course-grant reconciliation failed. It will be retried on startup.',
+        error instanceof Error ? error.name : undefined,
+      );
+    }
+  }
+
+  /**
+   * One-time idempotent backfill so existing faculty doctors automatically
+   * receive default Control grade-entry permissions without manual editing.
+   */
+  async ensureExistingDoctorsControlPermissions(): Promise<number> {
+    if (typeof this.users?.updateMany !== 'function') return 0;
+    try {
+      const res = await this.users.updateMany(
+        {
+          role: 'staff',
+          staffType: 'doctor',
+          controlEntryDefaultsInitialized: { $ne: true },
+        },
+        {
+          $addToSet: {
+            permissions: { $each: [...DOCTOR_CONTROL_DEFAULT_PERMISSIONS] },
+          },
+          $set: { controlEntryDefaultsInitialized: true },
+        },
+      );
+      const count = res.modifiedCount ?? 0;
+      this.logger.log(
+        `Control grade-entry defaults initialized for ${count} doctor accounts`,
+      );
+      return count;
+    } catch (error) {
+      this.logger.error(
+        'Doctor Control permission backfill failed. Its remaining accounts will be retried on startup.',
+        error instanceof Error ? error.stack : undefined,
+      );
+      return 0;
+    }
+  }
 
   async list(query: QueryStaffDto, actorRole?: string) {
     const filter: FilterQuery<UserDocument> = {};
@@ -166,18 +226,46 @@ export class StaffManagementService {
     return this.courseAssignments!.list(query, staffId);
   }
 
+  async listGradeEntryCourseIds(staffId: string) {
+    await this.findStaffRecord(staffId);
+    const courseIds = this.courseAssignments
+      ? await this.courseAssignments.listGradeEntryCourseIds(staffId)
+      : [];
+    return { courseIds };
+  }
+
   async create(
     dto: CreateStaffDto,
     actorId: string,
     actorRole?: string,
     session?: ClientSession,
   ): Promise<StaffItem> {
-    if (actorRole !== 'admin' && dto.permissions !== undefined) {
+    if (
+      actorRole !== 'admin' &&
+      (dto.permissions !== undefined || dto.gradeEntryCourseIds !== undefined)
+    ) {
       throw new ForbiddenException(
         'Only administrators may assign staff permissions',
       );
     }
-    if (dto.courseIds?.length && !session) {
+    if (dto.gradeEntryCourseIds?.length && !dto.courseIds?.length) {
+      throw new BadRequestException(
+        'Assign courses before enabling grade entry',
+      );
+    }
+    if (
+      actorRole !== 'admin' &&
+      dto.staffType === 'doctor' &&
+      dto.courseIds?.length
+    ) {
+      throw new ForbiddenException(
+        'Only administrators may assign courses to doctors',
+      );
+    }
+    if (
+      (dto.courseIds?.length || dto.gradeEntryCourseIds?.length) &&
+      !session
+    ) {
       const result = await this.users.db.transaction((transaction) =>
         this.create(dto, actorId, actorRole, transaction),
       );
@@ -193,11 +281,7 @@ export class StaffManagementService {
           'Administrative staff cannot create administrator accounts',
         );
       }
-      if (
-        dto.staffType !== 'doctor' &&
-        dto.staffType !== 'teaching_assistant' &&
-        dto.staffType !== 'assistant_lecturer'
-      ) {
+      if (!isAcademicTeachingStaff(dto.staffType)) {
         throw new ForbiddenException(
           'Administrative staff may only create Doctor and Teaching Assistant accounts',
         );
@@ -215,12 +299,13 @@ export class StaffManagementService {
         : await this.generateStaffCode();
     const staffType =
       targetRole === 'admin' ? undefined : dto.staffType || 'administrative';
-    const permissions =
+    const basePermissions =
       targetRole === 'admin'
         ? []
         : dto.permissions !== undefined
           ? dto.permissions
           : [...(STAFF_TYPE_DEFAULT_PERMISSIONS[staffType!] || [])];
+    const permissions = basePermissions;
 
     const titlePrefix =
       staffType === 'doctor'
@@ -228,7 +313,12 @@ export class StaffManagementService {
           inferDoctorPrefix(dto.nameAr) ??
           inferDoctorPrefix(dto.name) ??
           'dr')
-        : undefined;
+        : staffType === 'dean'
+          ? (dto.titlePrefix ??
+            inferDoctorPrefix(dto.nameAr) ??
+            inferDoctorPrefix(dto.name) ??
+            undefined)
+          : undefined;
 
     try {
       const payload = {
@@ -244,13 +334,35 @@ export class StaffManagementService {
         passwordHash,
         mustChangePassword: true,
         permissions,
+        ...(staffType === 'doctor'
+          ? { controlEntryDefaultsInitialized: true }
+          : {}),
         isActive: true,
       };
       const created = session
         ? (await this.users.create([payload], { session }))[0]
         : await this.users.create(payload);
-      if (dto.courseIds?.length && session)
+      if (session && dto.courseIds?.length) {
         await this.courseAssignments!.sync(created, dto.courseIds, session);
+      }
+      if (session && dto.gradeEntryCourseIds !== undefined) {
+        await this.courseAssignments!.setGradeEntryCourses(
+          created,
+          dto.gradeEntryCourseIds,
+          session,
+        );
+      }
+      if (
+        session &&
+        isSupportingAcademicStaff(created.staffType) &&
+        dto.gradeEntryCourseIds !== undefined
+      ) {
+        await this.courseAssignments!.reconcileEntryPermissions(
+          created,
+          this.users,
+          session,
+        );
+      }
       await this.recordAudit(
         actorId,
         created._id.toString(),
@@ -261,6 +373,9 @@ export class StaffManagementService {
           titlePrefix: created.titlePrefix,
           permissions: created.permissions,
           courseIds: dto.courseIds,
+          ...(dto.gradeEntryCourseIds !== undefined
+            ? { gradeEntryCourseIds: dto.gradeEntryCourseIds }
+            : {}),
         },
         undefined,
         session,
@@ -283,12 +398,18 @@ export class StaffManagementService {
     actorRole?: string,
     session?: ClientSession,
   ): Promise<StaffItem> {
-    if (actorRole !== 'admin' && dto.permissions !== undefined) {
+    if (
+      actorRole !== 'admin' &&
+      (dto.permissions !== undefined || dto.gradeEntryCourseIds !== undefined)
+    ) {
       throw new ForbiddenException(
         'Only administrators may assign staff permissions',
       );
     }
-    if (dto.courseIds !== undefined && !session) {
+    if (
+      (dto.courseIds !== undefined || dto.gradeEntryCourseIds !== undefined) &&
+      !session
+    ) {
       const result = await this.users.db.transaction((transaction) =>
         this.update(id, dto, actorId, actorRole, transaction),
       );
@@ -302,19 +423,29 @@ export class StaffManagementService {
       );
 
     if (actorRole !== 'admin') {
-      if (current.role === 'admin' || current.staffType === 'administrative') {
+      if (
+        current.role === 'admin' ||
+        !isAcademicTeachingStaff(current.staffType)
+      ) {
         throw new ForbiddenException(
           'Administrative staff cannot modify administrator or administrative accounts',
         );
       }
-      if (
-        dto.staffType &&
-        dto.staffType !== 'doctor' &&
-        dto.staffType !== 'teaching_assistant' &&
-        dto.staffType !== 'assistant_lecturer'
-      ) {
+      if (dto.staffType && !isAcademicTeachingStaff(dto.staffType)) {
         throw new ForbiddenException(
           'Administrative staff may only manage Doctor and Teaching Assistant accounts',
+        );
+      }
+      if (
+        (dto.staffType === 'doctor' && current.staffType !== 'doctor') ||
+        (current.staffType === 'doctor' &&
+          (dto.courseIds !== undefined ||
+            dto.email !== undefined ||
+            dto.username !== undefined ||
+            (dto.staffType !== undefined && dto.staffType !== 'doctor')))
+      ) {
+        throw new ForbiddenException(
+          'Only administrators may change doctor assignments or account identity',
         );
       }
     }
@@ -327,11 +458,34 @@ export class StaffManagementService {
     const titlePrefix =
       current.role === 'staff' && effectiveStaffType === 'doctor'
         ? (dto.titlePrefix ??
-          (current.staffType === 'doctor' ? current.titlePrefix : undefined) ??
+          (current.staffType === 'doctor' || current.staffType === 'dean'
+            ? current.titlePrefix
+            : undefined) ??
           inferDoctorPrefix(dto.nameAr ?? current.nameAr) ??
           inferDoctorPrefix(dto.name ?? current.name) ??
           'dr')
-        : undefined;
+        : current.role === 'staff' && effectiveStaffType === 'dean'
+          ? (dto.titlePrefix ??
+            (current.staffType === 'dean' || current.staffType === 'doctor'
+              ? current.titlePrefix
+              : undefined) ??
+            inferDoctorPrefix(dto.nameAr ?? current.nameAr) ??
+            inferDoctorPrefix(dto.name ?? current.name) ??
+            undefined)
+          : undefined;
+
+    const initializedDoctor =
+      effectiveStaffType === 'doctor' && current.staffType !== 'doctor';
+    const resolvedPermissions =
+      dto.permissions ??
+      (initializedDoctor
+        ? [
+            ...new Set([
+              ...(current.permissions ?? []),
+              ...DOCTOR_CONTROL_DEFAULT_PERMISSIONS,
+            ]),
+          ]
+        : undefined);
 
     const changes: Record<string, { from: unknown; to: unknown }> = {};
     const nextValues = {
@@ -346,8 +500,9 @@ export class StaffManagementService {
         : {}),
       ...(dto.staffType !== undefined ? { staffType: dto.staffType } : {}),
       titlePrefix,
-      ...(dto.permissions !== undefined
-        ? { permissions: dto.permissions }
+      ...(initializedDoctor ? { controlEntryDefaultsInitialized: true } : {}),
+      ...(resolvedPermissions !== undefined
+        ? { permissions: resolvedPermissions }
         : {}),
     };
 
@@ -355,7 +510,7 @@ export class StaffManagementService {
       if (
         key === 'permissions' &&
         JSON.stringify([...(current.permissions ?? [])].sort()) ===
-          JSON.stringify([...(dto.permissions ?? [])].sort())
+          JSON.stringify([...(resolvedPermissions ?? [])].sort())
       )
         continue;
       const previous = current.get(key);
@@ -367,9 +522,31 @@ export class StaffManagementService {
       if (dto.permissions !== undefined && changes.permissions)
         current.tokenVersion = (current.tokenVersion ?? 0) + 1;
       await current.save(session ? { session } : undefined);
-      if (dto.courseIds !== undefined && session) {
+      if (session && dto.courseIds !== undefined) {
         await this.courseAssignments!.sync(current, dto.courseIds, session);
         changes.courseIds = { from: undefined, to: dto.courseIds };
+      }
+      if (session && dto.gradeEntryCourseIds !== undefined) {
+        await this.courseAssignments!.setGradeEntryCourses(
+          current,
+          dto.gradeEntryCourseIds,
+          session,
+        );
+        changes.gradeEntryCourseIds = {
+          from: undefined,
+          to: dto.gradeEntryCourseIds,
+        };
+      }
+      if (
+        session &&
+        isSupportingAcademicStaff(current.staffType) &&
+        (dto.courseIds !== undefined || dto.gradeEntryCourseIds !== undefined)
+      ) {
+        await this.courseAssignments!.reconcileEntryPermissions(
+          current,
+          this.users,
+          session,
+        );
       }
     } catch (error) {
       if (isDuplicateKeyError(error)) {
@@ -425,7 +602,11 @@ export class StaffManagementService {
   ): Promise<{ message: string }> {
     const current = await this.findStaffDocument(id);
     if (actorRole !== 'admin') {
-      if (current.role === 'admin' || current.staffType === 'administrative') {
+      if (
+        current.role === 'admin' ||
+        current.staffType === 'doctor' ||
+        !isAcademicTeachingStaff(current.staffType)
+      ) {
         throw new ForbiddenException(
           'Administrative staff cannot reset passwords for administrator or administrative accounts',
         );
@@ -466,7 +647,11 @@ export class StaffManagementService {
   ): Promise<StaffItem> {
     const current = await this.findStaffDocument(id);
     if (actorRole !== 'admin') {
-      if (current.role === 'admin' || current.staffType === 'administrative') {
+      if (
+        current.role === 'admin' ||
+        current.staffType === 'doctor' ||
+        !isAcademicTeachingStaff(current.staffType)
+      ) {
         throw new ForbiddenException(
           'Administrative staff cannot deactivate administrator or administrative accounts',
         );
@@ -499,7 +684,11 @@ export class StaffManagementService {
   ): Promise<StaffItem> {
     const current = await this.findStaffDocument(id);
     if (actorRole !== 'admin') {
-      if (current.role === 'admin' || current.staffType === 'administrative') {
+      if (
+        current.role === 'admin' ||
+        current.staffType === 'doctor' ||
+        !isAcademicTeachingStaff(current.staffType)
+      ) {
         throw new ForbiddenException(
           'Administrative staff cannot activate administrator or administrative accounts',
         );
@@ -592,7 +781,12 @@ export class StaffManagementService {
             inferDoctorPrefix(record.nameAr) ??
             inferDoctorPrefix(record.name) ??
             'dr')
-          : undefined,
+          : record.role !== 'admin' && record.staffType === 'dean'
+            ? (record.titlePrefix ??
+              inferDoctorPrefix(record.nameAr) ??
+              inferDoctorPrefix(record.name) ??
+              undefined)
+            : undefined,
       staffType:
         record.staffType ||
         (record.role === 'admin' ? undefined : 'administrative'),

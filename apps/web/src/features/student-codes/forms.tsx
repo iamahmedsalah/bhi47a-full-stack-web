@@ -73,7 +73,7 @@ export function CodeScopeForm({
       <form
         noValidate
         onSubmit={form.handleSubmit(scan)}
-        className="flex flex-wrap items-start gap-3"
+        className="grid items-start gap-3 sm:grid-cols-[minmax(12rem,16rem)_minmax(7rem,10rem)_auto] sm:justify-start"
       >
         {(["academicYear", "yearPrefix"] as const).map((key) => (
           <FormField
@@ -81,7 +81,7 @@ export function CodeScopeForm({
             control={form.control}
             name={key}
             render={({ field }) => (
-              <FormItem className="w-56">
+              <FormItem className="min-w-0">
                 {!(key === "academicYear" && configuredYears) && (
                   <FormLabel>{t(`fields.${key}`)}</FormLabel>
                 )}
@@ -127,7 +127,7 @@ export function CodeScopeForm({
             )}
           />
         ))}
-        <Button type="submit" className="mt-8" disabled={pending}>
+        <Button type="submit" className="sm:mt-6" disabled={pending}>
           {t("scan")}
         </Button>
       </form>
@@ -138,6 +138,7 @@ export function CodeScopeForm({
 export interface CodeWriteIntent {
   adminAction?: "FREE" | "BAN" | "CONFIRM_OWNER";
   hold?: boolean;
+  nextHold?: boolean;
   deleteStudent?: boolean;
   snapshot: StudentCodeAuditResult;
   row?: StudentCodeFinding;
@@ -155,6 +156,7 @@ const errorKeys: Record<string, string> = {
   CODE_YEAR_CONFLICT: "mapping",
   CODE_YEAR_NOT_READY: "notReady",
   CODE_RECOVERY_UNSAFE: "unsafe",
+  CODE_PERMANENT: "permanentError",
   CODE_ACTIVE_OWNER: "activeOwner",
   CODE_OWNER_REVIEW_UNSAFE: "ownerReview",
   CODE_ARCHIVE_LIMIT: "archiveLimit",
@@ -247,7 +249,7 @@ export function CodeWriteDialog({
                 : intent.hold
                   ? t("hold")
                   : recovery
-                    ? t("recover")
+                    ? t(intent.row?.status === 'RESERVED' ? 'unreserve' : 'recover')
                     : t("initialize")}
           </DialogTitle>
         </DialogHeader>

@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Resolver, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { GRADE_STATUS_VALUES } from "@student-portal/shared";
+import { GRADE_STATUS_VALUES, SEMESTER_VALUES } from "@student-portal/shared";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AcademicYearSelect } from "@/components/ui/academic-year-select";
 import {
   Select,
   SelectContent,
@@ -52,6 +53,7 @@ export function GradeFormDialog({
   defaultValues,
 }: GradeFormDialogProps) {
   const t = useTranslations("grades.form");
+  const tTerm = useTranslations("controlDashboard");
   const locale = useLocale();
 
   const form = useForm<GradeFormValues>({
@@ -63,7 +65,7 @@ export function GradeFormDialog({
       grade: defaultValues?.grade ?? 0,
       maxGrade: defaultValues?.maxGrade ?? 100,
       status: defaultValues?.status ?? "present",
-      academicYear: defaultValues?.academicYear ?? "2024-2025",
+      academicYear: defaultValues?.academicYear ?? "",
       semester: defaultValues?.semester ?? "first",
       isPublished: defaultValues?.isPublished ?? false,
     },
@@ -79,7 +81,7 @@ export function GradeFormDialog({
         grade: defaultValues?.grade ?? 0,
         maxGrade: defaultValues?.maxGrade ?? 100,
         status: defaultValues?.status ?? "present",
-        academicYear: defaultValues?.academicYear ?? "2024-2025",
+        academicYear: defaultValues?.academicYear ?? "",
         semester: defaultValues?.semester ?? "first",
         isPublished: defaultValues?.isPublished ?? false,
       });
@@ -99,6 +101,8 @@ export function GradeFormDialog({
     control: form.control,
     name: "status",
   });
+  const academicYear = useWatch({ control: form.control, name: "academicYear" });
+  const semester = useWatch({ control: form.control, name: "semester" });
 
   const handleSubmit = form.handleSubmit(async (values) => {
     await onSubmit(values);
@@ -196,6 +200,32 @@ export function GradeFormDialog({
                       </SelectItem>
                     ),
                   )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <AcademicYearSelect
+                value={academicYear}
+                onChange={(year) => form.setValue("academicYear", year, { shouldValidate: true })}
+                disabled={isEditing || isSubmitting}
+                invalid={Boolean(form.formState.errors.academicYear)}
+                defaultToCurrent
+              />
+              {form.formState.errors.academicYear && (
+                <p role="alert" className="mt-1 text-xs text-danger">{form.formState.errors.academicYear.message}</p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="grade-semester" className="block text-sm font-medium">{tTerm("semester")}</label>
+              <Select
+                value={semester}
+                disabled={isEditing || isSubmitting}
+                onValueChange={(value) => form.setValue("semester", value, { shouldValidate: true })}
+              >
+                <SelectTrigger id="grade-semester" aria-label={tTerm("semester")}><SelectValue /></SelectTrigger>
+                <SelectContent dir={locale === "ar" ? "rtl" : "ltr"}>
+                  {SEMESTER_VALUES.map((value) => <SelectItem key={value} value={value}>{tTerm(`semesters.${value}`)}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

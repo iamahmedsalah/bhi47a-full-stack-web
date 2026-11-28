@@ -103,6 +103,7 @@ export class User {
 
   @Prop()
   deactivatedAt?: Date;
+  @Prop({ type: Date }) admissionArchivedAt?: Date;
 
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User' })
   deactivatedBy?: Types.ObjectId;
@@ -112,6 +113,12 @@ export class User {
 
   @Prop({ type: [String], default: [] })
   permissions!: string[];
+
+  @Prop({ type: Boolean, select: false })
+  controlEntryDefaultsInitialized?: boolean;
+
+  @Prop({ type: Number, select: false })
+  controlGradeGrantRevision?: number;
 
   @Prop({
     type: [

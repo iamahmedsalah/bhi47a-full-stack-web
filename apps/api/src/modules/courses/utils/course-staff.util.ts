@@ -1,5 +1,11 @@
 import { Types, type FilterQuery } from 'mongoose';
+import {
+  isFacultyMember,
+  isSupportingAcademicStaff,
+} from '@student-portal/shared';
 import type { CourseDocument } from '../schemas/course.schema';
+
+export { isFacultyMember, isSupportingAcademicStaff };
 
 type AssignmentKind = 'all' | 'doctor' | 'ta';
 const fields = (kind: AssignmentKind) => ({
@@ -71,6 +77,52 @@ export function isAssignedToCourse(
   );
 }
 
+export function courseStaffIds(course: object): string[] {
+  const paths = fields('all');
+  const record = course as Record<string, unknown>;
+  return [
+    ...new Set(
+      [
+        ...paths.singles.map((key) => referenceId(record[key])),
+        ...[...paths.arrays, ...paths.embedded].flatMap((key) => {
+          const values = record[key];
+          return Array.isArray(values) ? values.map(referenceId) : [];
+        }),
+      ].filter((id): id is string => Boolean(id && Types.ObjectId.isValid(id))),
+    ),
+  ];
+}
+
+const storedGradeEntryIds = {
+  $cond: [{ $isArray: '$gradeEntryStaffIds' }, '$gradeEntryStaffIds', []],
+};
+
+export function courseGradeEntryFilter(
+  staffId: Types.ObjectId,
+): FilterQuery<CourseDocument> {
+  return {
+    $or: [
+      { gradeEntryStaffIds: staffId },
+      {
+        $expr: {
+          $in: [String(staffId), storedGradeEntryIds],
+        },
+      },
+    ],
+  };
+}
+
+export function withoutGradeEntryStaff(staffIds: Types.ObjectId[]) {
+  const values = staffIds.flatMap((staffId) => [staffId, String(staffId)]);
+  return {
+    $filter: {
+      input: storedGradeEntryIds,
+      as: 'member',
+      cond: { $not: [{ $in: ['$$member', values] }] },
+    },
+  };
+}
+
 /** Keep assignments readable without a data rewrite, including pre-array records. */
 export function courseStaffFilter(
   userId: string,
@@ -105,5 +157,44 @@ export function courseStaffFilter(
 export function isTeachingStaff(staffType?: string): boolean {
   return ['doctor', 'teaching_assistant', 'assistant_lecturer'].includes(
     (staffType ?? '').trim().toLowerCase(),
+  );
+}
+
+export interface CourseContentActor {
+  _id: { toString(): string };
+  role: string;
+  staffType?: string;
+  permissions?: readonly string[];
+}
+
+export function canReadCourseContent(
+  course: unknown,
+  actor: CourseContentActor,
+): boolean {
+  return (
+    actor.role === 'admin' ||
+    (actor.role === 'staff' && isAssignedToCourse(course, String(actor._id)))
+  );
+}
+
+export function canManageCourseContent(
+  course: { contentSupervisorId?: Types.ObjectId },
+  actor: CourseContentActor,
+  owner: Types.ObjectId | string | undefined | null,
+  permission: string,
+): boolean {
+  if (actor.role === 'admin') return true;
+  if (
+    !actor.permissions?.includes(permission) ||
+    !canReadCourseContent(course, actor)
+  ) {
+    return false;
+  }
+  const id = String(actor._id);
+  return (
+    (Boolean(owner) && String(owner) === id) ||
+    (actor.staffType === 'doctor' &&
+      String(course.contentSupervisorId) === id &&
+      isAssignedToCourse(course, id, 'doctor'))
   );
 }

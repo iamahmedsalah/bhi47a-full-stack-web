@@ -1,5 +1,7 @@
 "use client";
 
+import { AcademicYearSelect } from "@/components/ui/academic-year-select";
+
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Menu from "@radix-ui/react-dropdown-menu";
@@ -314,20 +316,15 @@ export function StudentCourseEnrollmentDialog({
                   </Button>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="space-y-1 text-xs">
-                    <span>{text("السنة الدراسية", "Academic year")}</span>
-                    <Input
-                      dir="ltr"
-                      className="text-left"
-                      maxLength={9}
-                      value={academicYear}
-                      disabled={mutation.isPending}
-                      onChange={(event) => {
-                        setAcademicYear(event.target.value);
-                        setError("");
-                      }}
-                    />
-                  </label>
+                  <AcademicYearSelect
+                    value={academicYear}
+                    disabled={mutation.isPending}
+                    defaultToCurrent
+                    onChange={(year) => {
+                      setAcademicYear(year);
+                      setError("");
+                    }}
+                  />
                   <div className="space-y-1 text-xs">
                     <span>{text("الترم", "Semester")}</span>
                     <Select

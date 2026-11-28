@@ -27,7 +27,7 @@ export function HelpNote({
         {icon ?? <Info className="size-4 shrink-0" aria-hidden="true" />}
         <span className="flex-1">{title}</span>
         <ChevronDown
-          className="size-4 shrink-0 transition-transform group-data-[state=open]:rotate-180"
+          className="size-4 shrink-0 motion-safe:transition-transform group-data-[state=open]:rotate-180"
           aria-hidden="true"
         />
       </Collapsible.Trigger>

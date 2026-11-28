@@ -370,6 +370,15 @@ export class ControlController {
     return this.sheets.listCourses(user, query);
   }
 
+  @Get('dashboard')
+  @ApiOperation({ summary: 'Scoped grade entry and official course outcomes' })
+  dashboard(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: ControlTermQueryDto,
+  ) {
+    return this.sheets.dashboard(user, query);
+  }
+
   @Post('sheets')
   @ApiOperation({ summary: 'Open (get or create) a sheet' })
   openSheet(@CurrentUser() user: AuthenticatedUser, @Body() dto: OpenSheetDto) {

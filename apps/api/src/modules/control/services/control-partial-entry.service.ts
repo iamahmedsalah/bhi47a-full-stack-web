@@ -433,6 +433,7 @@ export class ControlPartialEntryService {
     this.assertCanSubmitPartial(user);
     const { sheet: targetSheet, course } =
       await this.sheets.requireSheetInScope(user, sheetId);
+    await this.access.assertCourseGradeWrite(user, targetSheet.courseId);
     const resolvedId = String(targetSheet._id);
 
     const session = await this.sheetModel.db.startSession();

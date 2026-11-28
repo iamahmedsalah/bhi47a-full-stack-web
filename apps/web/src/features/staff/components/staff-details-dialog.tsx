@@ -9,6 +9,8 @@ import {
   formatStaffDisplayName,
   getCleanStaffName,
   getStaffRoleLabel,
+  isFacultyMember,
+  isSupportingAcademicStaff,
 } from '@student-portal/shared';
 import {
   BookOpen,
@@ -20,11 +22,13 @@ import {
   Edit2,
   GraduationCap,
   KeyRound,
+  Lock,
   Mail,
   MapPin,
   Phone,
   Shield,
   ShieldCheck,
+  Unlock,
   User,
   UserX,
 } from 'lucide-react';
@@ -40,7 +44,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { useStaffCourses, useStaffSchedules } from '../queries';
+import {
+  useStaffCourses,
+  useStaffGradeEntryCourses,
+  useStaffSchedules,
+} from '../queries';
 import type { StaffMember } from '../types';
 
 interface Props {
@@ -67,6 +75,9 @@ export function StaffDetailsDialog({
   const [activeTab, setActiveTab] = useState<'overview' | 'courses' | 'permissions'>('overview');
 
   const coursesQuery = useStaffCourses(staff?._id);
+  const gradeEntryCoursesQuery = useStaffGradeEntryCourses(
+    staff && isSupportingAcademicStaff(staff.staffType) ? staff._id : null,
+  );
   const schedulesQuery = useStaffSchedules(staff?._id);
 
   if (!staff) return null;
@@ -115,6 +126,10 @@ export function StaffDetailsDialog({
         return 'border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400';
       case 'assistant_lecturer':
         return 'border-cyan-500/30 bg-cyan-500/10 text-cyan-600 dark:text-cyan-400';
+      case 'dean':
+        return 'border-purple-500/30 bg-purple-500/10 text-purple-600 dark:text-purple-400';
+      case 'control':
+        return 'border-orange-500/30 bg-orange-500/10 text-orange-600 dark:text-orange-400';
       case 'accountant':
         return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400';
       default:
@@ -407,18 +422,50 @@ export function StaffDetailsDialog({
                           </div>
                           {(() => {
                         const assignments = getCourseStaffIds(course);
-                        const isDoctor = assignments.doctorIds.includes(staff._id);
-                        const isTA = assignments.teachingAssistantIds.includes(staff._id);
-                        const roleBadge = isDoctor
+                        const isDoctor = assignments.doctorIds.includes(staff._id) || isFacultyMember(staff.staffType);
+                        const isTA = assignments.teachingAssistantIds.includes(staff._id) || isSupportingAcademicStaff(staff.staffType);
+                        const roleBadge = isFacultyMember(staff.staffType)
                           ? (isAr ? 'أستاذ مقرر' : 'Instructor')
                           : isTA
                             ? (staff.staffType === 'assistant_lecturer' ? (isAr ? 'مدرس مساعد' : 'Assistant Lecturer') : (isAr ? 'معيد' : 'TA'))
-                            : null;
-                        return roleBadge ? (
-                          <span className="rounded bg-teal-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-teal-600 dark:text-teal-400 border border-teal-500/20">
-                            {roleBadge}
-                          </span>
-                        ) : null;
+                            : isDoctor
+                              ? (isAr ? 'أستاذ مقرر' : 'Instructor')
+                              : null;
+                        const canEnterCourseGrades = isFacultyMember(staff.staffType)
+                          ? true
+                          : isSupportingAcademicStaff(staff.staffType)
+                            ? (gradeEntryCoursesQuery.data ?? []).includes(course._id)
+                            : false;
+                        return (
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {roleBadge && (
+                              <span className="rounded bg-teal-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-teal-600 dark:text-teal-400 border border-teal-500/20">
+                                {roleBadge}
+                              </span>
+                            )}
+                            {(isFacultyMember(staff.staffType) || isSupportingAcademicStaff(staff.staffType)) && (
+                              <span
+                                className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold border ${
+                                  canEnterCourseGrades
+                                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25'
+                                    : 'bg-muted/60 text-muted-foreground border-border/60'
+                                }`}
+                              >
+                                {canEnterCourseGrades ? (
+                                  <>
+                                    <Unlock className="h-2.5 w-2.5" />
+                                    <span>{isAr ? 'الرصد مفعّل' : 'Grade Entry Open'}</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Lock className="h-2.5 w-2.5" />
+                                    <span>{isAr ? 'تدريس فقط (الرصد مغلق)' : 'Teaching Only'}</span>
+                                  </>
+                                )}
+                              </span>
+                            )}
+                          </div>
+                        );
                       })()}
                       <p className="font-semibold text-xs text-foreground line-clamp-1" title={courseName}>
                             {courseName}

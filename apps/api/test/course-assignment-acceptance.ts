@@ -10,6 +10,7 @@ import {
 } from '../src/modules/courses/schemas/course.schema';
 import { courseStaffFilter } from '../src/modules/courses/utils/course-staff.util';
 import type { UserDocument } from '../src/modules/users/schemas/user.schema';
+import { ControlAccessService } from '../src/modules/control/services/control-access.service';
 
 export function defineCourseAssignmentAcceptance(context: {
   app: () => INestApplication;
@@ -69,6 +70,8 @@ export function defineCourseAssignmentAcceptance(context: {
             PERMISSIONS.QUIZZES_READ,
             PERMISSIONS.QUIZZES_WRITE,
             PERMISSIONS.COURSES_READ,
+            PERMISSIONS.COURSE_MATERIALS_WRITE,
+            PERMISSIONS.COURSE_MATERIALS_DELETE,
           ],
         });
         ids.push(String(staffId));
@@ -164,7 +167,88 @@ export function defineCourseAssignmentAcceptance(context: {
           reviewReleaseMode: 'manual',
           publishResults: false,
           allowReview: false,
+          canEdit: true,
         });
+        const material = await request(app.getHttpServer())
+          .post(`/api/courses/${String(courseId)}/materials`)
+          .set('Origin', context.origin())
+          .set('Cookie', staff.cookie)
+          .set('x-csrf-token', staff.csrf)
+          .send({
+            type: staffType === 'doctor' ? 'lecture' : 'section',
+            title: 'Recording',
+            videoUrl: 'https://example.test/recording',
+            weekNumber: 3,
+          })
+          .expect(201);
+        const materialRoute = `/api/courses/materials/${String(material.body.material._id)}`;
+        await request(app.getHttpServer())
+          .patch(materialRoute)
+          .set('Origin', context.origin())
+          .set('Cookie', staff.cookie)
+          .set('x-csrf-token', staff.csrf)
+          .send({ title: 'Updated recording', weekNumber: null })
+          .expect(200);
+        const listedMaterials = await request(app.getHttpServer())
+          .get(`/api/courses/${String(courseId)}/materials`)
+          .set('Cookie', staff.cookie)
+          .expect(200);
+        expect(listedMaterials.body.materials).toEqual([
+          expect.objectContaining({
+            title: 'Updated recording',
+            uploadedByName: 'Synthetic teaching staff',
+            uploadedByRole: staffType,
+            canEdit: true,
+            canDelete: true,
+          }),
+        ]);
+        const courseAccess = `/api/admin/courses/${String(courseId)}/staff-access`;
+        await request(app.getHttpServer())
+          .get(courseAccess)
+          .set('Cookie', staff.cookie)
+          .expect(403);
+        const initialAccess = await request(app.getHttpServer())
+          .get(courseAccess)
+          .set('Cookie', admin.cookie)
+          .expect(200);
+        expect(initialAccess.body).toMatchObject({
+          supervisorId: null,
+          gradeEntryStaffIds: [],
+        });
+        const actor = {
+          _id: String(staffId),
+          name: 'Synthetic teaching staff',
+          role: 'staff' as const,
+          staffType,
+          permissions: [
+            PERMISSIONS.CONTROL_ACCESS,
+            PERMISSIONS.CONTROL_SCOPE_ALL,
+            PERMISSIONS.CONTROL_GRADES_ENTER,
+          ],
+          mustChangePassword: false,
+          tokenVersion: 0,
+        };
+        const controlAccess = app.get(ControlAccessService);
+        await expect(
+          controlAccess.canWriteCourseGrades(actor, courseId),
+        ).resolves.toBe(staffType === 'doctor');
+        await request(app.getHttpServer())
+          .patch(courseAccess)
+          .set('Origin', context.origin())
+          .set('Cookie', admin.cookie)
+          .set('x-csrf-token', admin.csrf)
+          .send({
+            supervisorId: staffType === 'doctor' ? String(staffId) : null,
+            gradeEntryStaffIds: staffType === 'doctor' ? [] : [String(staffId)],
+            revision: initialAccess.body.revision,
+          })
+          .expect(200);
+        await expect(
+          controlAccess.canWriteCourseGrades(actor, courseId),
+        ).resolves.toBe(true);
+        await expect(
+          controlAccess.canWriteCourseGrades(actor, new Types.ObjectId()),
+        ).resolves.toBe(false);
         await patch(courseId, { name: 'Renamed without changing assignments' });
         expect(
           (await managerCourses()).body.items.map(
@@ -195,6 +279,23 @@ export function defineCourseAssignmentAcceptance(context: {
         });
         expect((await assigned()).body).toHaveLength(1);
         await patch(courseId, { doctorIds: [], teachingAssistantIds: [] });
+        await request(app.getHttpServer())
+          .delete(materialRoute)
+          .set('Origin', context.origin())
+          .set('Cookie', staff.cookie)
+          .set('x-csrf-token', staff.csrf)
+          .expect(403);
+        await expect(
+          controlAccess.canWriteCourseGrades(actor, courseId),
+        ).resolves.toBe(false);
+        const revoked = await request(app.getHttpServer())
+          .get(courseAccess)
+          .set('Cookie', admin.cookie)
+          .expect(200);
+        expect(revoked.body).toMatchObject({
+          supervisorId: null,
+          gradeEntryStaffIds: [],
+        });
         expect((await assigned()).body).toHaveLength(0);
         const persisted = await app
           .get<Model<unknown>>(getModelToken(Course.name))
@@ -220,6 +321,9 @@ export function defineCourseAssignmentAcceptance(context: {
         .expect(401);
     } finally {
       await db.collection('quizzes').deleteMany({ _id: { $in: quizIds } });
+      await db
+        .collection('course_materials')
+        .deleteMany({ courseId: { $in: courseIds } });
       await db.collection('courses').deleteMany({ _id: { $in: courseIds } });
     }
   }, 60000);

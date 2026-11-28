@@ -449,7 +449,10 @@ describe('ControlPartialEntryService & Coexistence', () => {
     };
 
     const access = new ControlAccessService(
-      { exists: () => chain({ _id: courseId }) } as never,
+      {
+        exists: () => chain({ _id: courseId }),
+        findById: () => chain(course),
+      } as never,
       { exists: () => chain({ _id: new Types.ObjectId() }) } as never,
     );
     const sheetsService = {

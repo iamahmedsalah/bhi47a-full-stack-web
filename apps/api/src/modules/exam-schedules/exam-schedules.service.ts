@@ -5,6 +5,10 @@ import {
   Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import {
+  loadProvisionalPolicy,
+  provisionalPolicyKey,
+} from '../admissions/enrollment-policy';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { createHash } from 'crypto';
@@ -284,12 +288,37 @@ export class ExamSchedulesService {
         )
       : await fetchSchedules();
 
+    const scopes = new Map<string, ReturnType<typeof loadProvisionalPolicy>>();
+    const schedules =
+      profile?.officialEnrollmentStatus === 'PROVISIONAL'
+        ? (
+            await Promise.all(
+              (publishedSchedules ?? []).map(async (schedule) => {
+                if (schedule.examType !== 'final') return schedule;
+                const key = provisionalPolicyKey(
+                  schedule.academicYear,
+                  schedule.semester,
+                );
+                if (!scopes.has(key))
+                  scopes.set(
+                    key,
+                    loadProvisionalPolicy(
+                      this.studentModel.db,
+                      schedule.academicYear,
+                      schedule.semester,
+                    ),
+                  );
+                return (await scopes.get(key))?.finalExam ? schedule : null;
+              }),
+            )
+          ).filter((schedule) => schedule !== null)
+        : publishedSchedules;
     return {
       seatNumber: profile?.seatNumber || null,
       examRoom: profile?.examRoom || null,
       examFloor: profile?.examFloor || null,
       examBuilding: profile?.examBuilding || null,
-      schedules: publishedSchedules || [],
+      schedules: schedules || [],
     };
   }
 }

@@ -2,6 +2,10 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Schema as MongoSchema, Types } from 'mongoose';
 import {
   ADMISSION_REQUEST_STATUSES,
+  MINISTRY_STATUSES,
+  OFFICIAL_ENROLLMENT_STATUSES,
+  type MinistryStatus,
+  type OfficialEnrollmentStatus,
   type AdmissionRequestStatus,
   type AdmissionGuardian,
   type AdmissionImportRow,
@@ -14,6 +18,8 @@ export class AdmissionEvent {
   @Prop({ required: true }) at!: Date;
   @Prop() reason?: string;
   @Prop({ required: true }) revision!: number;
+  @Prop() operationId?: string;
+  @Prop({ type: MongoSchema.Types.Mixed }) details?: Record<string, unknown>;
 }
 const EventSchema = SchemaFactory.createForClass(AdmissionEvent);
 @Schema({ _id: false })
@@ -50,6 +56,12 @@ export class AdmissionRequest {
   @Prop({ required: true, immutable: true }) academicYear!: string;
   @Prop({ type: String, enum: ADMISSION_REQUEST_STATUSES, default: 'PENDING' })
   status!: AdmissionRequestStatus;
+  @Prop({ type: String, enum: MINISTRY_STATUSES })
+  ministryStatus?: MinistryStatus;
+  @Prop({ type: String, enum: OFFICIAL_ENROLLMENT_STATUSES })
+  officialEnrollmentStatus?: OfficialEnrollmentStatus;
+  @Prop() enrollmentEffectiveDate?: string;
+  @Prop() correctionInstructions?: string;
   @Prop({ default: 0 }) revision!: number;
   @Prop({ required: true, immutable: true }) submittedAt!: Date;
   @Prop() waitlistedAt?: Date;
@@ -91,6 +103,12 @@ AdmissionRequestSchema.index(
   },
 );
 AdmissionRequestSchema.index({ academicYear: 1, status: 1, submittedAt: -1 });
+AdmissionRequestSchema.index({
+  ministryStatus: 1,
+  officialEnrollmentStatus: 1,
+  academicYear: 1,
+  submittedAt: -1,
+});
 AdmissionRequestSchema.index({
   groupId: 1,
   status: 1,

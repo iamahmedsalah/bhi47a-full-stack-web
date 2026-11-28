@@ -62,6 +62,7 @@ import { CourseMapFlow } from "@/components/registration/course-map-flow";
 import { cn } from "@/lib/cn";
 import { getApiErrorMessage } from "@/lib/api";
 import { useAuth } from "@/providers/auth-provider";
+import { academicYearOptionsKey } from "@/components/ui/academic-year-select";
 import { apiGet } from "@/lib/api-client";
 import { RestrictedFeature } from "@/components/admin/restricted-feature";
 import { PERMISSIONS } from "@student-portal/shared";
@@ -179,6 +180,7 @@ export function AdvisingWorkspace() {
   const refreshAcademicManagement = () => {
     queryClient.invalidateQueries({ queryKey: advisingKeys.academicYears });
     queryClient.invalidateQueries({ queryKey: advisingKeys.terms });
+    queryClient.invalidateQueries({ queryKey: academicYearOptionsKey });
   };
   const createYear = useMutation({
     mutationFn: () => advisingApi.createAcademicYear(newAcademicYear.trim()),
@@ -353,8 +355,7 @@ export function AdvisingWorkspace() {
       isOpen: boolean;
     }) => advisingApi.saveRegistrationTerm({ academicYear, semester, isOpen }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: advisingKeys.terms });
-      queryClient.invalidateQueries({ queryKey: advisingKeys.academicYears });
+      refreshAcademicManagement();
       queryClient.invalidateQueries({
         queryKey: advisingKeys.students(
           search,

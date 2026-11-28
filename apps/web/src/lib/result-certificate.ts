@@ -19,11 +19,12 @@ export interface ResultCertificateData {
   semester: string;
   totalAcquired: number;
   totalMax: number;
-  percentage: number;
-  gpa: number;
+  percentage: number | null;
+  gpa: number | null;
   overallGradeLetter?: string;
   overallGradeName?: string;
   passedCourses: number;
+  finalizedCourses: number;
   courses: ResultCertificateCourse[];
   visibleComponents?: { midterm: boolean; final: boolean; total: boolean };
   issuedAt: string;
@@ -510,7 +511,7 @@ function certificateMarkup(data: ResultCertificateData, logoUrl: string) {
         <td style="font-weight: 700; color: #64748b;">${index + 1}</td>
         <td class="course-cell">
           <span class="c-name">${escapeHtml(course.name)}</span>
-          <span class="c-code">${escapeHtml(course.code)}${course.creditHours ? ` · ${course.creditHours} ${isAr ? "ساعات" : "Hrs"}` : ""}</span>
+          <span class="c-code">${escapeHtml(course.code)} · ${course.creditHours ?? "—"} ${isAr ? "ساعات" : "Hrs"}</span>
         </td>
 ${data.visibleComponents?.midterm !== false ? `        <td style="font-family: monospace; font-weight: 700;">${escapeHtml(course.midterm)}</td>` : ""}
 ${data.visibleComponents?.final !== false ? `        <td style="font-family: monospace; font-weight: 700;">${escapeHtml(course.final)}</td>` : ""}
@@ -572,11 +573,11 @@ ${
     ? `        <section class="summary-band">
           <div class="summary-tile primary-tile">
             <span class="sum-label">${escapeHtml(copy.gpa)}</span>
-            <span class="sum-val" style="font-family: monospace;">${data.gpa.toFixed(2)} / 4.00</span>
+            <span class="sum-val" style="font-family: monospace;">${data.gpa === null ? "—" : `${data.gpa.toFixed(2)} / 4.00`}</span>
           </div>
           <div class="summary-tile primary-tile">
             <span class="sum-label">${escapeHtml(copy.percentage)}</span>
-            <span class="sum-val" style="font-family: monospace;">${data.percentage}%</span>
+            <span class="sum-val" style="font-family: monospace;">${data.percentage === null ? "—" : `${data.percentage}%`}</span>
           </div>
           <div class="summary-tile accent-tile">
             <span class="sum-label">${escapeHtml(copy.overallGrade)}</span>
@@ -584,11 +585,11 @@ ${
           </div>
           <div class="summary-tile">
             <span class="sum-label">${escapeHtml(copy.marks)}</span>
-            <span class="sum-val" style="font-family: monospace; font-size: 11px;">${data.totalAcquired} / ${data.totalMax}</span>
+            <span class="sum-val" style="font-family: monospace; font-size: 11px;">${data.finalizedCourses ? `${data.totalAcquired} / ${data.totalMax}` : "—"}</span>
           </div>
           <div class="summary-tile">
             <span class="sum-label">${escapeHtml(copy.passed)}</span>
-            <span class="sum-val" style="font-family: monospace;">${data.passedCourses} / ${data.courses.length}</span>
+            <span class="sum-val" style="font-family: monospace;">${data.finalizedCourses ? `${data.passedCourses} / ${data.finalizedCourses}` : "—"}</span>
           </div>
         </section>
 

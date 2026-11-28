@@ -2,7 +2,11 @@ import { AuthSessionService } from '../auth/services/auth-session.service';
 import { Types } from 'mongoose';
 import { QueryStaffDto } from './dto/query-staff.dto';
 import { validate } from 'class-validator';
-import { ValidationPipe, type ExecutionContext } from '@nestjs/common';
+import {
+  ForbiddenException,
+  ValidationPipe,
+  type ExecutionContext,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { QueryStaffCoursesDto } from './dto/query-staff-courses.dto';
@@ -468,7 +472,11 @@ describe('Staff management security contracts', () => {
           ),
         },
       };
-      const assignments = { sync: jest.fn().mockResolvedValue(undefined) };
+      const assignments = {
+        sync: jest.fn().mockResolvedValue(undefined),
+        setGradeEntryCourses: jest.fn().mockResolvedValue(undefined),
+        reconcileEntryPermissions: jest.fn().mockResolvedValue(undefined),
+      };
       const service = new StaffManagementService(
         users as never,
         { create: jest.fn().mockResolvedValue({}) } as never,
@@ -522,7 +530,7 @@ describe('Staff management security contracts', () => {
       },
     );
 
-    it.each(['doctor', 'teaching_assistant', 'assistant_lecturer'] as const)(
+    it.each(['teaching_assistant', 'assistant_lecturer'] as const)(
       'lets staff managers assign courses to %s with default permissions',
       async (staffType) => {
         const { service, stored, assignments } = setup();
@@ -556,6 +564,59 @@ describe('Staff management security contracts', () => {
         );
       },
     );
+
+    it('requires administrator authority to provision a doctor with course access', async () => {
+      const { service, stored, assignments } = setup();
+      const actor = '507f1f77bcf86cd799439012';
+      const courseIds = ['507f1f77bcf86cd799439013'];
+      const draft = {
+        name: 'Doctor',
+        email: 'doctor@example.test',
+        password: 'SyntheticPassword123!',
+        staffType: 'doctor' as const,
+      };
+      await expect(
+        service.create({ ...draft, courseIds }, actor, 'staff'),
+      ).rejects.toThrow(ForbiddenException);
+      const account = await service.create(draft, actor, 'staff');
+      await expect(
+        service.update(account._id, { courseIds }, actor, 'staff'),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.resetPassword(
+          account._id,
+          { newPassword: draft.password },
+          actor,
+          'staff',
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(stored.staffType).toBe('doctor');
+      expect(assignments.sync).not.toHaveBeenCalled();
+    });
+
+    it('applies grade-entry-only updates without rewriting teaching assignments or invalidating sessions', async () => {
+      const { service, stored, assignments } = setup();
+      stored.staffType = 'teaching_assistant';
+      const gradeEntryCourseIds = ['507f1f77bcf86cd799439013'];
+      await service.update(
+        String(stored._id),
+        { gradeEntryCourseIds },
+        '507f1f77bcf86cd799439012',
+        'admin',
+      );
+      expect(assignments.setGradeEntryCourses).toHaveBeenCalledWith(
+        stored,
+        gradeEntryCourseIds,
+        expect.any(Object),
+      );
+      expect(assignments.reconcileEntryPermissions).toHaveBeenCalledWith(
+        stored,
+        expect.any(Object),
+        expect.any(Object),
+      );
+      expect(assignments.sync).not.toHaveBeenCalled();
+      expect(stored.tokenVersion).toBeUndefined();
+    });
 
     it('rejects permission escalation through staff create and profile update', async () => {
       const { service, users, assignments } = setup();
@@ -809,10 +870,142 @@ describe('Staff management security contracts', () => {
         'أستاذ مقرر (دكتور)',
       );
       expect(getStaffRoleLabel('teaching_assistant', 'staff', 'ar')).toBe(
-        'معيد (هيئة تدريس)',
+        'معيد (هيئة معاونة)',
       );
       expect(getStaffRoleLabel('assistant_lecturer', 'staff', 'ar')).toBe(
-        'مدرس مساعد (هيئة تدريس)',
+        'مدرس مساعد (هيئة معاونة)',
+      );
+      expect(getStaffRoleLabel('dean', 'staff', 'ar')).toBe('عميد المعهد');
+      expect(getStaffRoleLabel('dean', 'staff', 'en')).toBe('Institute Dean');
+      expect(getStaffRoleLabel('control', 'staff', 'ar')).toBe(
+        'مسؤول الكنترول',
+      );
+      expect(getStaffRoleLabel('control', 'staff', 'en')).toBe(
+        'Control Officer',
+      );
+      expect(
+        formatStaffDisplayName(
+          {
+            name: 'Hany Hussien',
+            nameAr: 'هاني حسين',
+            staffType: 'dean',
+            titlePrefix: 'prof',
+          },
+          'ar',
+        ),
+      ).toBe('أ.د. هاني حسين');
+      expect(
+        formatStaffDisplayName(
+          {
+            name: 'Control Office',
+            nameAr: 'مكتب الكنترول',
+            staffType: 'control',
+          },
+          'ar',
+        ),
+      ).toBe('مكتب الكنترول');
+    });
+
+    it('creates dean and control accounts with dedicated governance defaults and protects them from non-admin staff', async () => {
+      const actor = '507f1f77bcf86cd799439012';
+      let currentDoc: Record<string, unknown> | null = null;
+      const users = {
+        findOne: jest.fn((filter: Record<string, unknown>) => {
+          if (filter.$or) {
+            return {
+              select: () => ({ lean: () => Promise.resolve(null) }),
+            };
+          }
+          if (filter._id) {
+            const doc = {
+              ...currentDoc,
+              get: (k: string) => currentDoc?.[k],
+              set: (vals: Record<string, unknown>) =>
+                Object.assign(currentDoc!, vals),
+              save: jest.fn().mockResolvedValue(undefined),
+            };
+            return Object.assign(Promise.resolve(doc), {
+              select: () => ({ lean: () => Promise.resolve(currentDoc) }),
+              session: () => Promise.resolve(doc),
+            });
+          }
+          return {
+            select: () => ({
+              sort: () => ({ lean: () => Promise.resolve(null) }),
+              lean: () => Promise.resolve(null),
+            }),
+            sort: () => ({ exec: () => Promise.resolve(null) }),
+          };
+        }),
+        create: jest.fn((payload: unknown) => {
+          const item = Array.isArray(payload) ? payload[0] : payload;
+          currentDoc = {
+            _id: new Types.ObjectId('507f1f77bcf86cd799439099'),
+            ...(item as Record<string, unknown>),
+          };
+          return Promise.resolve(
+            Array.isArray(payload) ? [currentDoc] : currentDoc,
+          );
+        }),
+        updateMany: jest.fn().mockResolvedValue({ modifiedCount: 2 }),
+      };
+      const svc = new StaffManagementService(
+        users as never,
+        { create: jest.fn().mockResolvedValue({}) } as never,
+        { hash: jest.fn().mockResolvedValue('hash') } as never,
+      );
+
+      const dean = await svc.create(
+        {
+          name: 'Prof. Dean',
+          nameAr: 'أ.د. عميد المعهد',
+          email: 'dean@institute.edu',
+          password: 'SyntheticPassword123!',
+          staffType: 'dean',
+          titlePrefix: 'prof',
+        },
+        actor,
+        'admin',
+      );
+      expect(dean.staffType).toBe('dean');
+      expect(dean.titlePrefix).toBe('prof');
+      expect(dean.permissions).toEqual(
+        expect.arrayContaining([
+          PERMISSIONS.CONTROL_ACCESS,
+          PERMISSIONS.CONTROL_FINAL_APPROVE,
+          PERMISSIONS.CONTROL_PETITIONS_APPROVE,
+          PERMISSIONS.CONTROL_SCOPE_ALL,
+        ]),
+      );
+
+      await expect(
+        svc.create(
+          {
+            name: 'Unauthorized Control',
+            email: 'ctrl@institute.edu',
+            password: 'SyntheticPassword123!',
+            staffType: 'control',
+          },
+          actor,
+          'staff',
+        ),
+      ).rejects.toThrow('Doctor and Teaching Assistant');
+
+      await expect(
+        svc.update(dean._id, { name: 'Tamper' }, actor, 'staff'),
+      ).rejects.toThrow('cannot modify');
+
+      const backfilled = await svc.ensureExistingDoctorsControlPermissions();
+      expect(backfilled).toBe(2);
+      expect(users.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          role: 'staff',
+          staffType: 'doctor',
+          controlEntryDefaultsInitialized: { $ne: true },
+        }),
+        expect.objectContaining({
+          $set: { controlEntryDefaultsInitialized: true },
+        }),
       );
     });
   });

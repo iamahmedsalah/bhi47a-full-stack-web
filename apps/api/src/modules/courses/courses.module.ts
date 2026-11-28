@@ -21,6 +21,10 @@ import { MaterialStorageModule } from '../material-storage/material-storage.modu
 import { AiModule } from '../ai/ai.module';
 import { StudentEnrollmentController } from './student-enrollment.controller';
 import { StudentEnrollmentService } from './student-enrollment.service';
+import {
+  CourseStaffAssignment,
+  CourseStaffAssignmentSchema,
+} from '../attendance/schemas/course-staff-assignment.schema';
 
 @Module({
   imports: [
@@ -33,6 +37,7 @@ import { StudentEnrollmentService } from './student-enrollment.service';
       { name: CourseRegistration.name, schema: CourseRegistrationSchema },
       { name: StudentProfile.name, schema: StudentProfileSchema },
       { name: User.name, schema: UserSchema },
+      { name: CourseStaffAssignment.name, schema: CourseStaffAssignmentSchema },
     ]),
   ],
   controllers: [CoursesController, StudentEnrollmentController],

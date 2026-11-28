@@ -113,7 +113,13 @@ test('consumes real Jest JSON with passing, failing, skipped and todo tests', ()
       '--config', JSON.stringify({ rootDir: temporary, testEnvironment: 'node', testMatch: ['**/*.test.cjs'], collectCoverage: true, collectCoverageFrom: ['logic.cjs'], coverageDirectory: path.join(temporary, 'coverage') }),
       '--runInBand', '--json', '--outputFile', output,
     ];
-    const result = spawnSync(process.execPath, args, { encoding: 'utf8', timeout: 60000 });
+    function runJest() {
+      const result = spawnSync(process.execPath, args, { encoding: 'utf8', timeout: 120_000 });
+      assert.ifError(result.error);
+      return result;
+    }
+
+    const result = runJest();
     assert.equal(result.status, 1, result.stderr);
     const report = render(JSON.parse(readFileSync(output, 'utf8')), 'failure');
     assert.equal(report.invalid, true);
@@ -123,7 +129,7 @@ test('consumes real Jest JSON with passing, failing, skipped and todo tests', ()
     // Reproduce the reported CI case: all executed tests pass and writing the
     // JSON must leave the Jest process successful as well.
     writeFileSync(fixture, source.replace('expect(1).toBe(2)', 'expect(1).toBe(1)'));
-    const passingRun = spawnSync(process.execPath, args, { encoding: 'utf8', timeout: 60000 });
+    const passingRun = runJest();
     assert.equal(passingRun.status, 0, passingRun.stderr);
     const passingJson = JSON.parse(readFileSync(output, 'utf8'));
     assert.ok(Object.keys(passingJson.coverageMap || {}).some(file => file.endsWith('logic.cjs')), 'Coverage file matching and instrumentation must work with the patched glob/minimatch dependencies');

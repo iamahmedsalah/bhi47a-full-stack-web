@@ -49,7 +49,10 @@ interface UpdateUserOp {
 
 interface UpdateProfileOp {
   updateOne: {
-    filter: { studentCode: string };
+    filter: {
+      studentCode: string;
+      officialEnrollmentStatus?: { $ne: 'CANCELLED' };
+    };
     update: {
       $set: Record<string, unknown>;
     };
@@ -239,7 +242,10 @@ export class StudentImporter implements Importer {
 
         profileOps.push({
           updateOne: {
-            filter: { studentCode },
+            filter: {
+              studentCode,
+              officialEnrollmentStatus: { $ne: 'CANCELLED' },
+            },
             update: {
               $set: {
                 fullName: resolvedName,

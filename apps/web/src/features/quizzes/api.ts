@@ -35,6 +35,8 @@ export interface QuizItem {
   courseNameEn?: string;
   creatorId?: string;
   creatorName?: string;
+  canEdit?: boolean;
+  canDelete?: boolean;
   academicYear?: string;
   semester?: string;
   durationMinutes: number;
@@ -86,6 +88,7 @@ export interface QuizSubmission {
 
 export interface StudentQuizViewItem {
   _id: string;
+  provisional?: boolean;
   title: string;
   titleAr?: string;
   description?: string;

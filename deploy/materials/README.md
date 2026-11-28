@@ -21,6 +21,10 @@ The setgid directories ensure files inherit the Nginx-readable group even though
 
 Set `.env.prod` values from `.env.prod.example`. On the existing VPS, add `include /etc/nginx/snippets/portal-materials-locations.conf;` inside the HTTPS server block in `/etc/nginx/sites-available/bhi47.app.conf`, then run `sudo nginx -t` and reload Nginx. Preserve all current Certbot certificate paths, TLS listeners, redirects, and existing routes; the repository's full `portal.conf` is a fresh-host template, not a replacement for the live HTTPS site. Then deploy the API/web images through the existing release workflow. `MATERIALS_DELIVERY=stream` is for local development; production uses `nginx`. No provider credentials should be put on command lines. Do not enable these routes on a Vercel API deployment: they require a persistent filesystem.
 
+When the upload locations change, install the updated `portal-materials-locations.conf` on the host and validate and reload Nginx. The image release does not update this host snippet. The replacement route (`PATCH /api/courses/materials/:materialId`) uses the same 26 MiB request limit as a new upload.
+
+To test file preview in development, use an isolated development database and upload a sample into the local storage root. A database record for a VPS upload can still appear in a local listing if development points at that database. Its file bytes remain on the VPS volume and the local API will report the file as unavailable.
+
 ## Inventory and migration
 
 Build the API first. Locally, run `node deploy/materials/manage.cjs inventory` with `MONGODB_URI` and `MATERIALS_ROOT` in the environment. Inside the production image:

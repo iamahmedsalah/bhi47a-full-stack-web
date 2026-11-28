@@ -97,6 +97,7 @@ export class ControlAttemptsService {
     this.access.assertPermission(user, PERMISSIONS.CONTROL_GRADES_ENTER);
     this.access.assertPermission(user, PERMISSIONS.CONTROL_SHEETS_REVIEW);
     const { sheet } = await this.sheets.requireSheetInScope(user, sheetId);
+    await this.access.assertCourseGradeWrite(user, sheet.courseId);
     const session = await this.grades.db.startSession();
     try {
       await session.withTransaction(async () => {
@@ -195,6 +196,7 @@ export class ControlAttemptsService {
     this.access.assertPermission(user, PERMISSIONS.CONTROL_GRADES_ENTER);
     this.access.assertPermission(user, PERMISSIONS.CONTROL_SHEETS_REVIEW);
     const { sheet } = await this.sheets.requireSheetInScope(user, sheetId);
+    await this.access.assertCourseGradeWrite(user, sheet.courseId);
     if (sheet.semester !== 'summer') throw attemptConflict('IC_SUMMER_ONLY');
     const source = (await this.store.preview(sheet)).icSources.find((row) =>
       row.source.marks.some(

@@ -37,7 +37,10 @@ import {
 import {
   CreateCourseMaterialDto,
   QueryCourseMaterialsDto,
+  UpdateCourseMaterialDto,
 } from './dto/course-material.dto';
+import { UpdateCourseStaffAccessDto } from './dto/course-staff-access.dto';
+import type { AuthenticatedUser } from '../auth/types/authenticated-request';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
@@ -338,8 +341,39 @@ export class CoursesController {
   @Roles('admin', 'staff')
   @RequirePermissions(PERMISSIONS.COURSES_WRITE)
   @ApiOperation({ summary: 'Create new course (Admin)' })
-  async create(@Body() dto: CreateCourseDto) {
-    return this.coursesService.create(dto);
+  async create(
+    @Body() dto: CreateCourseDto,
+    @CurrentUser() caller: AuthenticatedUser,
+  ) {
+    return this.coursesService.create(dto, caller);
+  }
+
+  @Get('admin/courses/:id/staff-access')
+  @Roles('admin', 'staff')
+  getCourseStaffAccess(
+    @Param('id', ParseObjectIdPipe) id: string,
+    @CurrentUser() caller: AuthenticatedUser,
+  ) {
+    return this.coursesService.getCourseStaffAccess(id, caller);
+  }
+
+  @Patch('admin/courses/:id/staff-access')
+  @Roles('admin', 'staff')
+  updateCourseStaffAccess(
+    @Param('id', ParseObjectIdPipe) id: string,
+    @Body() dto: UpdateCourseStaffAccessDto,
+    @CurrentUser() caller: AuthenticatedUser,
+  ) {
+    return this.coursesService.updateCourseStaffAccess(id, dto, caller);
+  }
+
+  @Get('admin/courses/:id/syllabus/capabilities')
+  @Roles('admin', 'staff')
+  getBookCapabilities(
+    @Param('id', ParseObjectIdPipe) id: string,
+    @CurrentUser() caller: AuthenticatedUser,
+  ) {
+    return this.coursesService.getBookCapabilities(id, caller);
   }
 
   @Post('admin/courses/:id/syllabus')
@@ -430,8 +464,9 @@ export class CoursesController {
   async update(
     @Param('id', ParseObjectIdPipe) id: string,
     @Body() dto: UpdateCourseDto,
+    @CurrentUser() caller: AuthenticatedUser,
   ) {
-    return this.coursesService.update(id, dto);
+    return this.coursesService.update(id, dto, caller);
   }
 
   @Delete('admin/courses/:id/syllabus')
@@ -493,6 +528,20 @@ export class CoursesController {
     return this.coursesService.getCourseMaterials(id, query, caller);
   }
 
+  @Get('courses/materials/:materialId/preview')
+  @Roles('admin', 'staff', 'student')
+  @ApiOperation({
+    summary:
+      'Preview course lecture or section content in-app. Blocked students receive 403 Forbidden.',
+  })
+  async previewMaterial(
+    @Param('materialId', ParseObjectIdPipe) materialId: string,
+    @Query('entry') entry: string | undefined,
+    @CurrentUser() caller: any,
+  ) {
+    return this.coursesService.previewCourseMaterial(materialId, caller, entry);
+  }
+
   @Get('courses/materials/:materialId/download')
   @Roles('admin', 'staff', 'student')
   @ApiOperation({
@@ -501,10 +550,44 @@ export class CoursesController {
   })
   async downloadMaterial(
     @Param('materialId', ParseObjectIdPipe) materialId: string,
+    @Query('inline') inline: string | undefined,
+    @Query('entry') entry: string | undefined,
     @Res() res: Response,
     @CurrentUser() caller: any,
   ) {
+    const isInline = inline === '1' || inline === 'true';
+    if (isInline || entry) {
+      return this.coursesService.downloadCourseMaterial(
+        materialId,
+        res,
+        caller,
+        { inline: isInline, ...(entry ? { entry } : {}) },
+      );
+    }
     return this.coursesService.downloadCourseMaterial(materialId, res, caller);
+  }
+
+  @Patch([
+    'courses/materials/:materialId',
+    'admin/courses/materials/:materialId',
+  ])
+  @Roles('admin', 'staff')
+  @RequirePermissions(PERMISSIONS.COURSE_MATERIALS_WRITE)
+  @UseInterceptors(MaterialUploadInterceptor(false, true))
+  @ApiConsumes('multipart/form-data', 'application/json')
+  @ApiOperation({ summary: 'Edit a course lecture or section' })
+  updateMaterial(
+    @Param('materialId', ParseObjectIdPipe) id: string,
+    @UploadedFiles() files: MaterialUpload[] | undefined,
+    @Body() dto: UpdateCourseMaterialDto,
+    @CurrentUser() caller: AuthenticatedUser,
+  ) {
+    return this.coursesService.updateCourseMaterial(
+      id,
+      files ?? [],
+      dto,
+      caller,
+    );
   }
 
   @Delete([

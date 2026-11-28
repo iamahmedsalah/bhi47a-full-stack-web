@@ -3,13 +3,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Checkbox } from "@/components/ui/checkbox";
-import { getStaffCourseChoices, getStaffFormCourses } from "../api";
+import {
+  getStaffCourseChoices,
+  getStaffFormCourses,
+  getStaffGradeEntryCourseIds,
+} from "../api";
 import { StaffPermissionFields } from "./staff-permission-fields";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useWatch, useForm } from "react-hook-form";
 import {
   Loader2,
+  Lock,
   Sparkles,
+  Unlock,
   User,
   Mail,
   Shield,
@@ -21,11 +27,13 @@ import {
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import {
+  CONTROL_COURSE_ENTRY_PERMISSIONS,
   STAFF_TYPE_VALUES,
   PERMISSIONS,
   STAFF_TYPE_DEFAULT_PERMISSIONS,
   DOCTOR_PREFIX_VALUES,
   inferDoctorPrefix,
+  isSupportingAcademicStaff,
   stripStaffTitlePrefix,
   type StaffType,
   type DoctorPrefix,
@@ -125,11 +133,15 @@ function StaffFormDialogState({
   const selectedRole = (watchedForm.role ?? '');
   const selectedType = (watchedForm.staffType ?? '');
   const selectedCourses = watchedForm.courseIds ?? [];
+  const selectedGradeEntryCourses = watchedForm.gradeEntryCourseIds ?? [];
   const teaching =
     selectedRole === "staff" &&
+    (isAdmin || selectedType !== "doctor") &&
     ["doctor", "teaching_assistant", "assistant_lecturer"].includes(
       selectedType,
     );
+  const isSupportingAcademic =
+    selectedRole === "staff" && isSupportingAcademicStaff(selectedType);
   const courseChoices = useQuery({
     queryKey: ["staff-course-choices"],
     queryFn: getStaffCourseChoices,
@@ -139,6 +151,19 @@ function StaffFormDialogState({
     queryKey: ["staff-form-courses", staff?._id],
     queryFn: () => getStaffFormCourses(staff!._id),
     enabled: open && canManageStaff && Boolean(staff && staff.role === "staff"),
+    staleTime: 0,
+  });
+  const gradeEntryAssignments = useQuery({
+    queryKey: ["staff-grade-entry-courses", staff?._id],
+    queryFn: () => getStaffGradeEntryCourseIds(staff!._id),
+    enabled:
+      open &&
+      isAdmin &&
+      Boolean(
+        staff &&
+          staff.role === "staff" &&
+          isSupportingAcademicStaff(staff.staffType),
+      ),
     staleTime: 0,
   });
   const visibleCourses = (courseChoices.data ?? []).filter((course) =>
@@ -171,6 +196,7 @@ function StaffFormDialogState({
       titlePrefix: initialTitlePrefix,
       isCreate: !staff,
       courseIds: staff ? undefined : [],
+      gradeEntryCourseIds: staff ? undefined : [],
       permissions: staff?.permissions ?? [
         ...STAFF_TYPE_DEFAULT_PERMISSIONS[allowedStaffTypes[0] ?? "doctor"],
       ],
@@ -190,6 +216,17 @@ function StaffFormDialogState({
       );
   }, [open, staff, assignments.data, form]);
 
+  useEffect(() => {
+    if (
+      open &&
+      staff &&
+      gradeEntryAssignments.data &&
+      !form.getFieldState("gradeEntryCourseIds").isDirty
+    ) {
+      form.setValue("gradeEntryCourseIds", gradeEntryAssignments.data);
+    }
+  }, [open, staff, gradeEntryAssignments.data, form]);
+
   const save = async (values: StaffFormValues) => {
     form.clearErrors("root");
     try {
@@ -198,8 +235,16 @@ function StaffFormDialogState({
         titlePrefix:
           values.staffType === "doctor"
             ? values.titlePrefix || "dr"
-            : undefined,
+            : values.staffType === "dean"
+              ? values.titlePrefix || undefined
+              : undefined,
         courseIds: teaching ? values.courseIds : [],
+        ...(isAdmin && isSupportingAcademicStaff(values.staffType) &&
+          (!staff || form.getFieldState("gradeEntryCourseIds").isDirty)
+          ? {
+              gradeEntryCourseIds: values.gradeEntryCourseIds ?? [],
+            }
+          : { gradeEntryCourseIds: undefined }),
       });
     } catch (error) {
       const failure = staffFormError(getApiErrorDetails(error));
@@ -250,7 +295,8 @@ function StaffFormDialogState({
     if (
       detectedPrefix &&
       !explicitTitle.current &&
-      form.getValues("staffType") === "doctor"
+      (form.getValues("staffType") === "doctor" ||
+        form.getValues("staffType") === "dean")
     ) {
       form.setValue("titlePrefix", detectedPrefix, {
         shouldValidate: true,
@@ -406,6 +452,11 @@ function StaffFormDialogState({
                             !form.getValues("titlePrefix")
                           ) {
                             form.setValue("titlePrefix", "dr");
+                          } else if (value === "dean" && !explicitTitle.current) {
+                            form.setValue("titlePrefix", "prof");
+                          }
+                          if (!isSupportingAcademicStaff(value)) {
+                            form.setValue("gradeEntryCourseIds", []);
                           }
                           if (!staff)
                             form.setValue("permissions", [
@@ -436,8 +487,9 @@ function StaffFormDialogState({
                 />
               )}
 
-              {/* Doctor Academic Title Prefix (Only when staffType is doctor) */}
-              {selectedRole !== "admin" && selectedType === "doctor" && (
+              {/* Academic Title Prefix (Doctor required, Dean optional) */}
+              {selectedRole !== "admin" &&
+                (selectedType === "doctor" || selectedType === "dean") && (
                 <FormField
                   control={form.control}
                   name="titlePrefix"
@@ -448,10 +500,13 @@ function StaffFormDialogState({
                         {t("fields.titlePrefix")}
                       </FormLabel>
                       <Select
-                        value={field.value || "dr"}
+                        value={
+                          field.value ||
+                          (selectedType === "doctor" ? "dr" : "none")
+                        }
                         onValueChange={(value) => {
                           explicitTitle.current = true;
-                          field.onChange(value);
+                          field.onChange(value === "none" ? null : value);
                         }}
                       >
                         <FormControl>
@@ -462,6 +517,11 @@ function StaffFormDialogState({
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent dir={isAr ? "rtl" : "ltr"}>
+                          {selectedType === "dean" && (
+                            <SelectItem value="none">
+                              {isAr ? "بدون لقب أكاديمي" : "No academic prefix"}
+                            </SelectItem>
+                          )}
                           {DOCTOR_PREFIX_VALUES.map((prefix) => (
                             <SelectItem key={prefix} value={prefix}>
                               {t(`doctorPrefixes.${prefix}`)}
@@ -611,6 +671,17 @@ function StaffFormDialogState({
                       {t("details.assignedCoursesDescription")}
                       {' '}{isAr ? 'اختيار المقررات اختياري، ويمكن تعيين حتى 3 دكاترة لكل مقرر.' : 'Course selection is optional. Each course can have up to 3 doctors.'}
                     </p>
+                    {isAdmin && (
+                      <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-[11px] text-muted-foreground leading-relaxed">
+                        {selectedType === "doctor"
+                          ? isAr
+                            ? "عضو هيئة التدريس (الدكتور) مخوّل وملزم تلقائياً برصد درجات جميع المقررات المسندة إليه."
+                            : "Faculty doctors are automatically authorized to enter grades for all their assigned courses."
+                          : isAr
+                            ? "الأصل أن الهيئة المعاونة لا ترصد الدرجات؛ يمكنك تفعيل زر (فتح الرصد) فقط للمقررات المطلوب منه رصدها استثنائياً."
+                            : "By default, supporting staff do not enter grades. Click (Enable Entry) only on the specific courses they should grade."}
+                      </div>
+                    )}
                     <div className="flex flex-wrap gap-2">
                       <Input aria-label={isAr ? "البحث عن مقرر" : "Search courses"} placeholder={isAr ? "ابحث بالاسم أو الكود" : "Search by name or code"} value={courseSearch} onChange={(event) => setCourseSearch(event.target.value)} className="flex-1 rounded-squircle" />
                       <Select value={courseLevel} onValueChange={setCourseLevel}>
@@ -649,6 +720,8 @@ function StaffFormDialogState({
                           const isSelected = selectedCourses.includes(
                             course._id,
                           );
+                          const isGradeEntryAllowed =
+                            selectedGradeEntryCourses.includes(course._id);
                           return (
                             <label
                               key={course._id}
@@ -661,26 +734,135 @@ function StaffFormDialogState({
                               <Checkbox
                                 disabled={pending}
                                 checked={isSelected}
-                                onCheckedChange={(checked) =>
-                                  form.setValue(
-                                    "courseIds",
+                                onCheckedChange={(checked) => {
+                                  const nextCourses =
                                     checked === true
                                       ? [...selectedCourses, course._id]
                                       : selectedCourses.filter(
                                           (id) => id !== course._id,
+                                        );
+                                  form.setValue("courseIds", nextCourses, {
+                                    shouldDirty: true,
+                                    shouldValidate: true,
+                                  });
+                                  if (checked !== true && isGradeEntryAllowed) {
+                                    const nextEntry =
+                                      selectedGradeEntryCourses.filter(
+                                        (id) => id !== course._id,
+                                      );
+                                    form.setValue(
+                                      "gradeEntryCourseIds",
+                                      nextEntry,
+                                      { shouldDirty: true },
+                                    );
+                                    const currentPerms = (form.getValues(
+                                      "permissions",
+                                    ) ?? []) as Permission[];
+                                    if (
+                                      nextEntry.length === 0 &&
+                                      !currentPerms.includes(
+                                        PERMISSIONS.CONTROL_SCOPE_ALL,
+                                      )
+                                    ) {
+                                      form.setValue(
+                                        "permissions",
+                                        currentPerms.filter(
+                                          (p) =>
+                                            !(
+                                              CONTROL_COURSE_ENTRY_PERMISSIONS as readonly string[]
+                                            ).includes(p),
                                         ),
-                                    { shouldDirty: true, shouldValidate: true },
-                                  )
-                                }
+                                        { shouldDirty: true },
+                                      );
+                                    }
+                                  }
+                                }}
                               />
                               <bdi className="font-mono text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-squircle border border-primary/20">
                                 {course.code}
                               </bdi>
-                              <span className="font-medium flex-1">
+                              <span className="font-medium flex-1 truncate">
                                 {isAr
                                   ? course.nameAr || course.name
                                   : course.nameEn || course.name}
                               </span>
+                              {isAdmin && isSupportingAcademic && isSelected && (
+                                <button
+                                  type="button"
+                                  disabled={pending}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    const nextEntry = isGradeEntryAllowed
+                                      ? selectedGradeEntryCourses.filter(
+                                          (id) => id !== course._id,
+                                        )
+                                      : [
+                                          ...selectedGradeEntryCourses,
+                                          course._id,
+                                        ];
+                                    form.setValue(
+                                      "gradeEntryCourseIds",
+                                      nextEntry,
+                                      {
+                                        shouldDirty: true,
+                                        shouldValidate: true,
+                                      },
+                                    );
+                                    const currentPerms = (form.getValues(
+                                      "permissions",
+                                    ) ?? []) as Permission[];
+                                    if (nextEntry.length > 0) {
+                                      form.setValue(
+                                        "permissions",
+                                        Array.from(
+                                          new Set([
+                                            ...currentPerms,
+                                            ...CONTROL_COURSE_ENTRY_PERMISSIONS,
+                                          ]),
+                                        ) as Permission[],
+                                        { shouldDirty: true },
+                                      );
+                                    } else if (
+                                      !currentPerms.includes(
+                                        PERMISSIONS.CONTROL_SCOPE_ALL,
+                                      )
+                                    ) {
+                                      form.setValue(
+                                        "permissions",
+                                        currentPerms.filter(
+                                          (p) =>
+                                            !(
+                                              CONTROL_COURSE_ENTRY_PERMISSIONS as readonly string[]
+                                            ).includes(p),
+                                        ),
+                                        { shouldDirty: true },
+                                      );
+                                    }
+                                  }}
+                                  className={`inline-flex items-center gap-1 rounded-squircle border px-2 py-1 text-[10px] font-semibold transition-all cursor-pointer shrink-0 ${
+                                    isGradeEntryAllowed
+                                      ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                                      : "border-border/70 bg-background/80 text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                                  }`}
+                                >
+                                  {isGradeEntryAllowed ? (
+                                    <>
+                                      <Unlock className="h-3 w-3" />
+                                      <span>
+                                        {isAr ? "الرصد مفتوح" : "Entry Open"}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Lock className="h-3 w-3" />
+                                      <span>
+                                        {isAr ? "فتح الرصد" : "Enable Entry"}
+                                      </span>
+                                    </>
+                                  )}
+                                </button>
+                              )}
                             </label>
                           );
                         })}
@@ -724,7 +906,13 @@ function StaffFormDialogState({
                     (courseChoices.isPending ||
                       courseChoices.isError ||
                       Boolean(
-                        staff && (assignments.isPending || assignments.isError),
+                        staff &&
+                          (assignments.isPending ||
+                            assignments.isError ||
+                            (isAdmin &&
+                              isSupportingAcademicStaff(staff.staffType) &&
+                              (gradeEntryAssignments.isPending ||
+                                gradeEntryAssignments.isError))),
                       )))
                 }
                 className="rounded-squircle gap-2 bg-primary font-semibold text-white hover:bg-primary-hover"

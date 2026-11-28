@@ -206,6 +206,9 @@ describe('ControlPetitionsService', () => {
     };
 
     const access = new ControlAccessService({} as never, {} as never);
+    const assertCourseScope = jest
+      .spyOn(access, 'assertCourseIdScope')
+      .mockResolvedValue(undefined);
     const sheets = {
       requireSheetInScope: jest.fn().mockResolvedValue({ sheet, course }),
       getRosterStudentIds: jest
@@ -257,6 +260,7 @@ describe('ControlPetitionsService', () => {
       sheet,
       storedGrades,
       storedPetitions,
+      assertCourseScope,
       auditModel,
     };
   }
@@ -338,6 +342,18 @@ describe('ControlPetitionsService', () => {
       tokenVersion: 1,
     };
 
+    ctx.assertCourseScope.mockRejectedValueOnce(
+      new ForbiddenException('Out of course scope'),
+    );
+    await expect(ctx.service.getPetition(dean, created.id)).rejects.toThrow(
+      ForbiddenException,
+    );
+    ctx.assertCourseScope.mockRejectedValueOnce(
+      new ForbiddenException('Out of course scope'),
+    );
+    await expect(
+      ctx.service.decidePetition(dean, created.id, { items: [] }),
+    ).rejects.toThrow(ForbiddenException);
     const decided = await ctx.service.decidePetition(dean, created.id, {
       reviewNote: 'تمت مراجعة كراسات الإجابة',
       items: [

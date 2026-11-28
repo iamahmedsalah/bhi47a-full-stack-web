@@ -101,6 +101,7 @@ export default function AdmissionPeriodsPage({
         opensAt: times.opensAt,
         closesAt: times.closesAt,
         isEnabled: values.isEnabled,
+        lifecycleEnabled: values.lifecycleEnabled,
       };
       if (initial)
         await updateAdmissionPeriod(initial._id, {

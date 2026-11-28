@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
+import { AcademicYearSelect } from "@/components/ui/academic-year-select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { getApiErrorMessage } from "@/lib/api";
 import {
@@ -241,32 +241,14 @@ export function AnalyticsExportModal({
             </fieldset>
           )}
           <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label
-                htmlFor="analytics-export-year"
-                className="text-xs font-semibold"
-              >
-                {t("academicYear")}
-              </Label>
-              <Input
-                id="analytics-export-year"
-                dir="ltr"
-                className="text-left"
-                value={academicYear}
-                placeholder="2026-2027"
-                maxLength={9}
-                disabled={busy}
-                aria-invalid={!validYear}
-                aria-describedby="analytics-year-hint"
-                onChange={(event) => setAcademicYear(event.target.value)}
-              />
-              <p
-                id="analytics-year-hint"
-                className={`text-xs ${validYear ? "text-muted-foreground" : "text-destructive"}`}
-              >
-                {t(validYear ? "allYearsHint" : "invalidYear")}
-              </p>
-            </div>
+            <AcademicYearSelect
+              label={t("academicYear")}
+              value={academicYear}
+              disabled={busy}
+              invalid={!validYear}
+              onChange={setAcademicYear}
+              includeAll
+            />
             {renderSelect(
               "analytics-export-semester",
               t("semester"),

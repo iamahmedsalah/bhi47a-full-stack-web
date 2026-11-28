@@ -53,6 +53,7 @@ export class MaterialMutationInterceptor implements NestInterceptor {
 
 export function MaterialUploadInterceptor(
   book: boolean,
+  edit = false,
 ): Type<NestInterceptor> {
   @Injectable()
   class UploadInterceptor implements NestInterceptor {
@@ -62,11 +63,17 @@ export function MaterialUploadInterceptor(
     ) {}
     async intercept(context: ExecutionContext, next: CallHandler) {
       const request = context.switchToHttp().getRequest();
-      await this.courses.authorizeMaterialUpload(
-        request.params.id,
-        request.user,
-        book,
-      );
+      if (edit)
+        await this.courses.authorizeMaterialEdit(
+          request.params.materialId,
+          request.user,
+        );
+      else
+        await this.courses.authorizeMaterialUpload(
+          request.params.id,
+          request.user,
+          book,
+        );
       // Recording links carry JSON metadata and do not consume file capacity.
       if (!book && request.is?.('application/json')) return next.handle();
       await this.storage.checkCapacity();

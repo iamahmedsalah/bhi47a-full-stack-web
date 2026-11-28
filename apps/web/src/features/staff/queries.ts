@@ -5,6 +5,7 @@ import {
   deactivateStaff,
   deleteStaff,
   getStaffCourses,
+  getStaffGradeEntryCourseIds,
   getStaffSchedules,
   listStaff,
   resetStaffPassword,
@@ -19,6 +20,8 @@ export const staffKeys = {
   lists: () => [...staffKeys.all, 'list'] as const,
   list: (params: StaffListParams) => [...staffKeys.lists(), params] as const,
   courses: (doctorId: string) => [...staffKeys.all, 'courses', doctorId] as const,
+  gradeEntryCourses: (staffId: string) =>
+    [...staffKeys.all, 'grade-entry-courses', staffId] as const,
   schedules: (staffId: string) => [...staffKeys.all, 'schedules', staffId] as const,
 };
 
@@ -40,6 +43,16 @@ export function useStaffCourses(staffId: string | null | undefined) {
   });
 }
 
+export function useStaffGradeEntryCourses(staffId: string | null | undefined) {
+  return useQuery({
+    queryKey: staffKeys.gradeEntryCourses(staffId ?? ''),
+    queryFn: () =>
+      staffId ? getStaffGradeEntryCourseIds(staffId) : Promise.resolve([]),
+    enabled: Boolean(staffId),
+    staleTime: 0,
+  });
+}
+
 export function useStaffSchedules(staffId: string | null | undefined) {
   return useQuery({
     queryKey: staffKeys.schedules(staffId ?? ''),
@@ -55,6 +68,9 @@ export function useStaffMutations() {
     void queryClient.invalidateQueries({ queryKey: staffKeys.all });
     void queryClient.invalidateQueries({ queryKey: ['staff-course-choices'] });
     void queryClient.invalidateQueries({ queryKey: ['staff-form-courses'] });
+    void queryClient.invalidateQueries({ queryKey: ['staff-grade-entry-courses'] });
+    void queryClient.invalidateQueries({ queryKey: ['course-staff-access'] });
+    void queryClient.invalidateQueries({ queryKey: ['control'] });
     void queryClient.invalidateQueries({ queryKey: ['staff-options-for-courses'] });
     void queryClient.invalidateQueries({ queryKey: ['admin-staff-list'] });
     void queryClient.invalidateQueries({ queryKey: ['courses'] });

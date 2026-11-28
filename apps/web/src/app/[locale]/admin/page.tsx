@@ -16,7 +16,6 @@ import {
   Upload,
   Calendar,
   ArrowRight,
-  ArrowUpRight,
   CircleAlert,
   Loader2,
   CheckCircle2,
@@ -34,13 +33,17 @@ import {
   Eye,
   Maximize2,
   FileImage,
+  ChevronDown,
+  Inbox,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import * as Collapsible from "@radix-ui/react-collapsible";
 import { useAuth } from "@/providers/auth-provider";
 import {
   formatStaffDisplayName,
   getStaffRoleLabel,
+  PERMISSIONS,
 } from "@student-portal/shared";
 import {
   Area,
@@ -55,6 +58,7 @@ import {
 } from "recharts";
 import api, { getApiErrorMessage, PaginatedResponse } from "@/lib/api";
 import { PageTitleBanner } from "@/components/ui/page-title-banner";
+import { QuickAction, StudentLoginShortcut } from "@/components/dashboard/quick-actions";
 import {
   GpaDistributionChart,
   defaultGpaData,
@@ -110,6 +114,11 @@ const ActiveSessionsDialog = dynamic(() =>
 const AnalyticsExportModal = dynamic(() =>
   import("@/features/analytics/components/analytics-export-modal").then(
     (module) => module.AnalyticsExportModal,
+  ),
+);
+const ControlDashboardAnalytics = dynamic(() =>
+  import("@/features/control/components/control-dashboard-analytics").then(
+    (module) => module.ControlDashboardAnalytics,
   ),
 );
 const StudentFormDialog = dynamic(() =>
@@ -223,30 +232,6 @@ function getLastSevenDayTrend(
   return days;
 }
 
-interface QuickActionProps {
-  title: string;
-  icon: React.ReactNode;
-  onClick: () => void;
-}
-
-function QuickAction({ title, icon, onClick }: QuickActionProps) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group flex min-h-16 w-full text-start items-center gap-3 rounded-xl border border-border/70 bg-card/90 p-4 shadow-[var(--shadow-glow)] backdrop-blur transition-all duration-300 hover:border-primary/40 hover:bg-card-hover/70 cursor-pointer"
-    >
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-squircle border border-primary/30 bg-primary/10 text-primary transition-all duration-300 group-hover:bg-primary group-hover:text-white">
-        {icon}
-      </div>
-      <span className="min-w-0 flex-1 text-sm font-medium text-foreground">
-        {title}
-      </span>
-      <ArrowUpRight className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
-    </button>
-  );
-}
-
 function InsightCard({
   label,
   value,
@@ -288,6 +273,7 @@ function InsightCard({
 export default function AdminDashboard() {
   const t = useTranslations("dashboard");
   const tNav = useTranslations("nav");
+  const tShortcuts = useTranslations("adminShortcuts");
   const tStudents = useTranslations("students");
   const params = useParams();
   const router = useRouter();
@@ -302,8 +288,13 @@ export default function AdminDashboard() {
     isStaff &&
     (user?.staffType === "teaching_assistant" ||
       user?.staffType === "assistant_lecturer");
+  const isTeachingMember = isDoctor || isTeachingAssistant;
   const isAdministrative =
-    isStaff && (user?.staffType === "administrative" || !user?.staffType);
+    isStaff &&
+    (user?.staffType === "administrative" ||
+      user?.staffType === "dean" ||
+      user?.staffType === "control" ||
+      !user?.staffType);
 
   const assignedCoursesQuery = useQuery({
     queryKey: ["staff-assigned-courses", user?._id],
@@ -311,7 +302,7 @@ export default function AdminDashboard() {
       const res = await api.get<AssignedCourse[]>("/staff/me/assigned-courses");
       return res.data ?? [];
     },
-    enabled: isStaff,
+    enabled: isTeachingMember,
   });
   const assignedCourses = React.useMemo(() => assignedCoursesQuery.data ?? [], [assignedCoursesQuery.data]);
 
@@ -360,7 +351,7 @@ export default function AdminDashboard() {
       const res = await api.get<Array<TimetableEntry & { notes?: string }>>("/staff/me/schedule");
       return res.data ?? [];
     },
-    enabled: isStaff,
+    enabled: isTeachingMember,
   });
   const mySchedules = React.useMemo(() => myScheduleQuery.data ?? [], [myScheduleQuery.data]);
   const [doctorScheduleDayFilter, setDoctorScheduleDayFilter] = useState("all");
@@ -397,6 +388,9 @@ export default function AdminDashboard() {
 
   const hasPerm = (p: string) =>
     isAdmin || Boolean(user?.permissions?.includes(p));
+  const canViewControlAnalytics =
+    hasPerm(PERMISSIONS.CONTROL_ACCESS) &&
+    hasPerm(PERMISSIONS.CONTROL_SHEETS_VIEW);
 
   // Modal State for Quick Actions
   const [isAddStudentOpen, setIsAddStudentOpen] = useState(false);
@@ -717,8 +711,211 @@ export default function AdminDashboard() {
         id="analytics-dashboard-export"
         className="space-y-6"
       >
+        {(isAdmin || hasPerm(PERMISSIONS.ADMISSIONS_REQUESTS_READ) || hasPerm(PERMISSIONS.STUDENT_CODES_READ) ||
+          hasPerm(PERMISSIONS.CONTROL_ACCESS) || hasPerm(PERMISSIONS.REGISTRATION_WRITE)) && (
+          <section aria-labelledby="dashboard-shortcuts-title" data-no-export="true" className="space-y-3">
+            <h2 id="dashboard-shortcuts-title" className="text-lg font-semibold">{t("quickActions")}</h2>
+            <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+              {hasPerm(PERMISSIONS.ADMISSIONS_REQUESTS_READ) && (
+                <QuickAction title={tShortcuts("admissions")} icon={<Inbox className="size-4" />} onClick={() => router.push(`/${locale}/admin/admissions?tab=requests&queue=review`)} />
+              )}
+              {hasPerm(PERMISSIONS.CONTROL_ACCESS) && (
+                <QuickAction title={tShortcuts("control")} icon={<FileSpreadsheet className="size-4" />} onClick={() => router.push(`/${locale}/admin/control`)} />
+              )}
+              {hasPerm(PERMISSIONS.REGISTRATION_WRITE) && (
+                <QuickAction title={tShortcuts("registration")} icon={<CalendarDays className="size-4" />} onClick={() => router.push(`/${locale}/admin/settings?tab=terms`)} />
+              )}
+              {isAdmin && <StudentLoginShortcut locale={locale} />}
+              {!isAdmin && hasPerm(PERMISSIONS.STUDENT_CODES_READ) && (
+                <QuickAction title={tShortcuts("studentCodes")} icon={<GraduationCap className="size-4" />} onClick={() => router.push(`/${locale}/admin/admissions?tab=codes`)} />
+              )}
+            </div>
+            {isAdmin && (
+              <Collapsible.Root>
+                <Collapsible.Trigger asChild>
+                  <Button type="button" variant="ghost" size="sm" className="group mb-1.5 gap-2">
+                    {tShortcuts("more")}
+                    <ChevronDown aria-hidden="true" className="size-4 motion-safe:transition-transform group-data-[state=open]:rotate-180" />
+                  </Button>
+                </Collapsible.Trigger>
+                <Collapsible.Content className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+                  <QuickAction title={tShortcuts("studentCodes")} icon={<GraduationCap className="size-4" />} onClick={() => router.push(`/${locale}/admin/admissions?tab=codes`)} />
+                  <QuickAction title={tStudents("addStudent")} icon={<UserPlus className="size-4" />} onClick={() => setIsAddStudentOpen(true)} />
+                  <QuickAction title={tNav("uploads")} icon={<Upload className="size-4" />} onClick={() => setIsUploadOpen(true)} />
+                  <QuickAction title={tNav("examSchedules")} icon={<Calendar className="size-4" />} onClick={() => setIsAddScheduleOpen(true)} />
+                  <QuickAction title={tShortcuts("schedules")} icon={<CalendarDays className="size-4" />} onClick={() => router.push(`/${locale}/admin/schedules`)} />
+                  <QuickAction title={tNav("complaints")} icon={<MessageSquareWarning className="size-4" />} onClick={() => setIsComplaintLookupOpen(true)} />
+                  <QuickAction title={tNav("grades")} icon={<Users className="size-4" />} onClick={() => setIsAddGradeOpen(true)} />
+                  <QuickAction title={tNav("courses")} icon={<BookOpen className="size-4" />} onClick={() => setIsAddCourseOpen(true)} />
+                  <QuickAction title={tShortcuts("quizzes")} icon={<Award className="size-4" />} onClick={() => router.push(`/${locale}/admin/quizzes`)} />
+                  <QuickAction title={tShortcuts("attendance")} icon={<ClipboardCheck className="size-4" />} onClick={() => router.push(`/${locale}/admin/attendance`)} />
+                </Collapsible.Content>
+              </Collapsible.Root>
+            )}
+          </section>
+        )}
+        {isAdmin && (
+          <div className="space-y-6">
+            <StatCardRow>
+              <StatCard
+                title={t("totalStudents")}
+                value={totalStudents}
+                icon={<Users className="w-6 h-6" />}
+                color="#0d9488"
+              />
+              <StatCard
+                title={t("totalCourses")}
+                value={totalCourses}
+                icon={<BookOpen className="w-6 h-6" />}
+                color="#22d3ee"
+              />
+              <StatCard
+                title={t("activeComplaints")}
+                value={activeComplaints}
+                icon={<MessageSquareWarning className="w-6 h-6" />}
+                color="#f59e0b"
+              />
+              <StatCard
+                title={t("recentActivity")}
+                value="Online"
+                icon={<TrendingUp className="w-6 h-6" />}
+                color="#8b5cf6"
+              />
+            </StatCardRow>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <InsightCard
+                label={isAr ? "معدل إنجاز الشكاوى" : "Resolution Rate"}
+                value={`${resolutionRate}%`}
+                helper={
+                  isAr
+                    ? "الشكاوى المحلولة والمغلقة من إجمالي التذاكر."
+                    : "Resolved and closed complaints out of all tickets."
+                }
+                icon={<CheckCircle2 className="h-4 w-4" />}
+                tone={
+                  resolutionRate >= 70
+                    ? "success"
+                    : resolutionRate >= 40
+                      ? "warning"
+                      : "danger"
+                }
+              />
+              <InsightCard
+                label={isAr ? "شكاوى حرجة وعاجلة" : "High Priority"}
+                value={String(urgentComplaints)}
+                helper={
+                  isAr
+                    ? "تذاكر تتطلب متابعة تشغيلية عاجلة."
+                    : "Tickets that require faster operational follow-up."
+                }
+                icon={<AlertTriangle className="h-4 w-4" />}
+                tone={urgentComplaints > 0 ? "warning" : "success"}
+              />
+              <InsightCard
+                label={isAr ? "نسبة الطلاب النشطين" : "Active Student Ratio"}
+                value={`${activeStudentRate}%`}
+                helper={
+                  isAr
+                    ? "الطلاب المقيدون بحالة دراسية نشطة."
+                    : "Students with active enrollment status."
+                }
+                icon={<UserCheck className="h-4 w-4" />}
+                tone={activeStudentRate >= 80 ? "success" : "warning"}
+              />
+              <InsightCard
+                label={isAr ? "المقررات المطروحة" : "Course Offerings"}
+                value={totalCourses}
+                helper={
+                  isAr
+                    ? "دليل المواد المتاحة بجميع المستويات."
+                    : "Available course catalog across all levels."
+                }
+                icon={<BookOpen className="h-4 w-4" />}
+                tone="primary"
+              />
+            </div>
+
+            <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <ComplaintsWeeklyTrendChart
+                data={weeklyTrendData}
+                isAr={isAr}
+                isLoading={complaintsAnalyticsQuery.isLoading}
+              />
+              <ComplaintsStatusChart
+                data={complaintStatusData}
+                isAr={isAr}
+                isLoading={complaintsAnalyticsQuery.isLoading}
+              />
+            </section>
+
+            <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <EnrollmentStatusChart
+                data={enrollmentStatusData}
+                isAr={isAr}
+                isLoading={studentsStatsQuery.isLoading}
+                totalStudents={totalStudentsCountNum}
+                liveOnline={studentsStatsQuery.data?.liveOnline}
+                liveOnlineStaff={studentsStatsQuery.data?.liveOnlineStaff}
+                isAdmin={isAdmin}
+                onLiveOnlineClick={() => setIsActiveSessionsOpen(true)}
+              />
+              <CoursesByLevelChart
+                data={courseLevelData}
+                isAr={isAr}
+                isLoading={coursesAnalyticsQuery.isLoading}
+              />
+            </section>
+
+            <DeferredAnalyticsSummary
+              isAr={isAr}
+              canExport={hasPerm("analytics.export")}
+              onOpenExportModal={
+                hasPerm("analytics.export")
+                  ? () => setIsAnalyticsExportModalOpen(true)
+                  : undefined
+              }
+            />
+
+            {canViewControlAnalytics && (
+              <DeferredDashboardSection>
+                <ControlDashboardAnalytics />
+              </DeferredDashboardSection>
+            )}
+            <section className="space-y-6 pt-2">
+              <div className="flex items-center justify-between border-b border-border/70 pb-3">
+                <div>
+                  <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
+                    <GraduationCap className="h-5 w-5 text-primary" />
+                    {isAr
+                      ? "تحليلات الأداء الأكاديمي واستبقاء الطلاب"
+                      : "Academic Performance & Retention Analytics"}
+                  </h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {isAr
+                      ? "توزيع المعدلات التراكمية ومعدلات استبقاء المستويات الدراسية"
+                      : "GPA standing distributions and cohort retention rates"}
+                  </p>
+                </div>
+              </div>
+
+              <DeferredDashboardSection>
+                <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                  <GpaDistributionChart data={gpaChartData} isAr={isAr} />
+                  <CohortRetentionChart data={cohortChartData} isAr={isAr} />
+                </div>
+              </DeferredDashboardSection>
+            </section>
+            <DeferredDashboardSection>
+              <DepartmentCapacityChart data={departmentChartData} isAr={isAr} />
+            </DeferredDashboardSection>
+          </div>
+        )}
+        {!isAdmin && canViewControlAnalytics && (
+          <ControlDashboardAnalytics />
+        )}
         {/* STAFF / DOCTOR ASSIGNED COURSES WORKSPACE */}
-        {isStaff && (
+        {isTeachingMember && (
           <div className="space-y-4 rounded-2xl border border-primary/20 bg-card/90 p-5 shadow-(--shadow-glow) backdrop-blur">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
@@ -1082,83 +1279,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* QUICK ACTIONS SECTION (TRIGGER MODALS DIRECTLY) - ONLY FOR ADMIN */}
-        {isAdmin && (
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-foreground">
-              {t("quickActions")}
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {hasPerm("students.write") && (
-                <QuickAction
-                  title={tStudents("addStudent")}
-                  icon={<UserPlus className="w-5 h-5" />}
-                  onClick={() => setIsAddStudentOpen(true)}
-                />
-              )}
-              {hasPerm("uploads.import") && (
-                <QuickAction
-                  title={tNav("uploads")}
-                  icon={<Upload className="w-5 h-5" />}
-                  onClick={() => setIsUploadOpen(true)}
-                />
-              )}
-              {(hasPerm("exam_schedules.manage") ||
-                hasPerm("exam_schedules.read")) && (
-                <QuickAction
-                  title={tNav("examSchedules")}
-                  icon={<Calendar className="w-5 h-5" />}
-                  onClick={() => setIsAddScheduleOpen(true)}
-                />
-              )}
-              <QuickAction
-                title={
-                  isAr
-                    ? "جدول المحاضرات والسكاشن والقاعات"
-                    : "Lecture & Section Schedules"
-                }
-                icon={<CalendarDays className="w-5 h-5" />}
-                onClick={() => router.push(`/${locale}/admin/schedules`)}
-              />
-              {hasPerm("complaints.read") && (
-                <QuickAction
-                  title={tNav("complaints")}
-                  icon={<MessageSquareWarning className="w-5 h-5" />}
-                  onClick={() => setIsComplaintLookupOpen(true)}
-                />
-              )}
-              {(hasPerm("grades.write") || hasPerm("grades.read")) && (
-                <QuickAction
-                  title={tNav("grades")}
-                  icon={<Users className="w-5 h-5" />}
-                  onClick={() => setIsAddGradeOpen(true)}
-                />
-              )}
-              {(hasPerm("courses.write") || hasPerm("courses.read")) && (
-                <QuickAction
-                  title={tNav("courses")}
-                  icon={<BookOpen className="w-5 h-5" />}
-                  onClick={() => setIsAddCourseOpen(true)}
-                />
-              )}
-              {(hasPerm("quizzes.read") || hasPerm("quizzes.create")) && (
-                <QuickAction
-                  title={isAr ? "بنك الاختبارات والكويزات" : "Course Quizzes"}
-                  icon={<Award className="w-5 h-5" />}
-                  onClick={() => router.push(`/${locale}/admin/quizzes`)}
-                />
-              )}
-              {(hasPerm("attendance.read") || hasPerm("attendance.manage")) && (
-                <QuickAction
-                  title={isAr ? "جلسات الحضور والغياب" : "Attendance Sessions"}
-                  icon={<ClipboardCheck className="w-5 h-5" />}
-                  onClick={() => router.push(`/${locale}/admin/attendance`)}
-                />
-              )}
-            </div>
-          </div>
-        )}
-
         {/* ──────────────────────────────────────────────────────────── */}
         {/* 1. DOCTOR DASHBOARD VIEW (STAFF TYPE = DOCTOR)              */}
         {/* ──────────────────────────────────────────────────────────── */}
@@ -1428,7 +1548,7 @@ export default function AdminDashboard() {
                                 : "Midterm Exam"}
                           </span>
                           <span className="font-mono text-[11px] text-muted-foreground">
-                            {schedule.academicYear || "2026-2027"}
+                            {schedule.academicYear || "—"}
                           </span>
                         </div>
 
@@ -1732,8 +1852,13 @@ export default function AdminDashboard() {
                 />
               )}
               <StatCard
-                title={isAr ? "حالة الحساب الإداري" : "Administrative Status"}
-                value={isAr ? "موظف مصرح" : "Staff Online"}
+                title={isAr ? "الصفة الوظيفية" : "Official Position"}
+                value={getStaffRoleLabel(
+                  user?.staffType,
+                  user?.role,
+                  locale,
+                  user?.titlePrefix,
+                )}
                 icon={<TrendingUp className="w-6 h-6" />}
                 color="#8b5cf6"
               />
@@ -1779,168 +1904,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ──────────────────────────────────────────────────────────── */}
-        {/* 4. ADMIN DASHBOARD VIEW (ROLE = ADMIN)                       */}
-        {/* ──────────────────────────────────────────────────────────── */}
-        {isAdmin && (
-          <div className="space-y-6">
-            <StatCardRow>
-              <StatCard
-                title={t("totalStudents")}
-                value={totalStudents}
-                icon={<Users className="w-6 h-6" />}
-                color="#0d9488"
-              />
-              <StatCard
-                title={t("totalCourses")}
-                value={totalCourses}
-                icon={<BookOpen className="w-6 h-6" />}
-                color="#22d3ee"
-              />
-              <StatCard
-                title={t("activeComplaints")}
-                value={activeComplaints}
-                icon={<MessageSquareWarning className="w-6 h-6" />}
-                color="#f59e0b"
-              />
-              <StatCard
-                title={t("recentActivity")}
-                value="Online"
-                icon={<TrendingUp className="w-6 h-6" />}
-                color="#8b5cf6"
-              />
-            </StatCardRow>
-
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <InsightCard
-                label={isAr ? "معدل إنجاز الشكاوى" : "Resolution Rate"}
-                value={`${resolutionRate}%`}
-                helper={
-                  isAr
-                    ? "الشكاوى المحلولة والمغلقة من إجمالي التذاكر."
-                    : "Resolved and closed complaints out of all tickets."
-                }
-                icon={<CheckCircle2 className="h-4 w-4" />}
-                tone={
-                  resolutionRate >= 70
-                    ? "success"
-                    : resolutionRate >= 40
-                      ? "warning"
-                      : "danger"
-                }
-              />
-              <InsightCard
-                label={isAr ? "شكاوى حرجة وعاجلة" : "High Priority"}
-                value={String(urgentComplaints)}
-                helper={
-                  isAr
-                    ? "تذاكر تتطلب متابعة تشغيلية عاجلة."
-                    : "Tickets that require faster operational follow-up."
-                }
-                icon={<AlertTriangle className="h-4 w-4" />}
-                tone={urgentComplaints > 0 ? "warning" : "success"}
-              />
-              <InsightCard
-                label={isAr ? "نسبة الطلاب النشطين" : "Active Student Ratio"}
-                value={`${activeStudentRate}%`}
-                helper={
-                  isAr
-                    ? "الطلاب المقيدون بحالة دراسية نشطة."
-                    : "Students with active enrollment status."
-                }
-                icon={<UserCheck className="h-4 w-4" />}
-                tone={activeStudentRate >= 80 ? "success" : "warning"}
-              />
-              <InsightCard
-                label={isAr ? "المقررات المطروحة" : "Course Offerings"}
-                value={totalCourses}
-                helper={
-                  isAr
-                    ? "دليل المواد المتاحة بجميع المستويات."
-                    : "Available course catalog across all levels."
-                }
-                icon={<BookOpen className="h-4 w-4" />}
-                tone="primary"
-              />
-            </div>
-
-            <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <ComplaintsWeeklyTrendChart
-                data={weeklyTrendData}
-                isAr={isAr}
-                isLoading={complaintsAnalyticsQuery.isLoading}
-              />
-              <ComplaintsStatusChart
-                data={complaintStatusData}
-                isAr={isAr}
-                isLoading={complaintsAnalyticsQuery.isLoading}
-              />
-            </section>
-
-            <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <EnrollmentStatusChart
-                data={enrollmentStatusData}
-                isAr={isAr}
-                isLoading={studentsStatsQuery.isLoading}
-                totalStudents={totalStudentsCountNum}
-                liveOnline={studentsStatsQuery.data?.liveOnline}
-                liveOnlineStaff={studentsStatsQuery.data?.liveOnlineStaff}
-                isAdmin={isAdmin}
-                onLiveOnlineClick={() => setIsActiveSessionsOpen(true)}
-              />
-              <CoursesByLevelChart
-                data={courseLevelData}
-                isAr={isAr}
-                isLoading={coursesAnalyticsQuery.isLoading}
-              />
-            </section>
-
-            {/* ADVANCED ACADEMIC & INSTITUTIONAL ANALYTICS */}
-            <section className="space-y-6 pt-2">
-              <div className="flex items-center justify-between border-b border-border/70 pb-3">
-                <div>
-                  <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                    <GraduationCap className="h-5 w-5 text-primary" />
-                    {isAr
-                      ? "تحليلات الأداء الأكاديمي واستبقاء الطلاب"
-                      : "Academic Performance & Retention Analytics"}
-                  </h2>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {isAr
-                      ? "توزيع المعدلات التراكمية، ومعدلات استبقاء المستويات الدراسية، وطاقة الأقسام العلمية (شعبة عامة، نظم معلومات الأعمال، المحاسبة والمراجعة)"
-                      : "GPA standing distributions, cohort retention rates, and academic department capacity (General Division, Business Information Systems, Accounting and Auditing)"}
-                  </p>
-                </div>
-              </div>
-
-              {/* Row 1: GPA Distribution & Cohort Retention */}
-              <DeferredDashboardSection>
-                <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-                  <GpaDistributionChart data={gpaChartData} isAr={isAr} />
-                  <CohortRetentionChart data={cohortChartData} isAr={isAr} />
-                </div>
-              </DeferredDashboardSection>
-
-              {/* Row 2: Department Seat Capacity & Utilization */}
-              <DeferredDashboardSection>
-                {" "}
-                <DepartmentCapacityChart
-                  data={departmentChartData}
-                  isAr={isAr}
-                />
-              </DeferredDashboardSection>
-              <DeferredAnalyticsSummary
-                isAr={isAr}
-                canExport={hasPerm("analytics.export")}
-                onOpenExportModal={
-                  hasPerm("analytics.export")
-                    ? () => setIsAnalyticsExportModalOpen(true)
-                    : undefined
-                }
-              />
-            </section>
-          </div>
-        )}
       </div>
 
       {/* ─── ACTION MODALS MOUNTED ON DASHBOARD ─────────────────── */}

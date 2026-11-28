@@ -2,13 +2,25 @@
 services:
   mongodb:
     image: mongo:7.0
+    command: ['mongod', '--replSet', 'portal-test', '--port', '27019', '--bind_ip_all']
     ports:
-      - '127.0.0.1:27019:27017'
+      - '127.0.0.1:27019:27019'
     healthcheck:
-      test: ['CMD', 'mongosh', '--quiet', '--eval', 'db.adminCommand("ping").ok']
-      interval: 10s
+      test:
+        - CMD
+        - mongosh
+        - --port
+        - '27019'
+        - --quiet
+        - --eval
+        - >-
+          try { rs.status(); } catch (error) {
+          if (error.codeName !== 'NotYetInitialized') throw error;
+          rs.initiate({_id:'portal-test',members:[{_id:0,host:'127.0.0.1:27019'}]}); }
+          if (!db.hello().isWritablePrimary) quit(1);
+      interval: 5s
       timeout: 5s
-      retries: 12
+      retries: 20
   redis:
     image: redis:7-alpine
     ports:

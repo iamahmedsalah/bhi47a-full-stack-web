@@ -2263,12 +2263,13 @@ function AdminQuizzesContent() {
     try {
       setLoadingQuizId(quiz._id);
       const full = await getQuiz(quiz._id);
+      if (!(full.canEdit ?? user?.role === 'admin')) return;
       setSelectedQuiz(full);
-    } catch {
-      setSelectedQuiz(quiz);
+      setIsEditOpen(true);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err));
     } finally {
       setLoadingQuizId(null);
-      setIsEditOpen(true);
     }
   };
 
@@ -2277,11 +2278,11 @@ function AdminQuizzesContent() {
       setLoadingQuizId(quiz._id);
       const full = await getQuiz(quiz._id);
       setPreviewQuiz(full);
-    } catch {
-      setPreviewQuiz(quiz);
+      setIsPreviewOpen(true);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err));
     } finally {
       setLoadingQuizId(null);
-      setIsPreviewOpen(true);
     }
   };
 
@@ -2572,7 +2573,7 @@ function AdminQuizzesContent() {
                     </DropdownMenu.Item>
                   </>
                 )}
-                {canWrite && (
+                {(quiz.canEdit ?? user?.role === 'admin') && (
                   <>
                     <DropdownMenu.Item
                       onClick={() => handleOpenEdit(quiz)}
@@ -2619,17 +2620,19 @@ function AdminQuizzesContent() {
                           : (isAr ? 'إتاحة مراجعة الإجابات النموذجية' : 'Allow Answer Review')}
                       </span>
                     </DropdownMenu.Item>
-                    <DropdownMenu.Item
-                      onClick={() => {
-                        setQuizToDelete(quiz);
-                        setIsDeleteOpen(true);
-                      }}
-                      className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none text-danger hover:bg-danger/10 hover:text-danger transition-colors"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      <span>{isAr ? 'حذف الاختبار' : 'Delete Quiz'}</span>
-                    </DropdownMenu.Item>
                   </>
+                )}
+                {(quiz.canDelete ?? user?.role === 'admin') && (
+                  <DropdownMenu.Item
+                    onClick={() => {
+                      setQuizToDelete(quiz);
+                      setIsDeleteOpen(true);
+                    }}
+                    className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer outline-none text-danger hover:bg-danger/10 hover:text-danger transition-colors"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>{isAr ? 'حذف الاختبار' : 'Delete Quiz'}</span>
+                  </DropdownMenu.Item>
                 )}
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
@@ -2735,7 +2738,7 @@ function AdminQuizzesContent() {
           if (!open) setPreviewQuiz(null);
         }}
         isAr={isAr}
-        canEdit={canWrite}
+        canEdit={previewQuiz?.canEdit ?? user?.role === 'admin'}
         onEdit={(quiz) => {
           setIsPreviewOpen(false);
           handleOpenEdit(quiz);

@@ -34,7 +34,7 @@ import {
   type ColumnDef,
 } from "@/components/ui/data-table-shell";
 import { FilterBar } from "@/components/ui/filter-bar";
-import { Input } from "@/components/ui/input";
+import { AcademicYearSelect, useAcademicYearOptions } from "@/components/ui/academic-year-select";
 import { PageSkeletonLoader } from "@/components/ui/page-suspense-fallback";
 import { PageTitleBanner } from "@/components/ui/page-title-banner";
 import { PermissionGuard } from "@/components/ui/permission-guard";
@@ -101,6 +101,7 @@ function ControlPetitionsContent() {
   const { user } = useAuth();
   const locale = (params?.locale as string) || "ar";
   const isAr = locale === "ar";
+  const years = useAcademicYearOptions();
 
   const {
     page,
@@ -113,16 +114,16 @@ function ControlPetitionsContent() {
   } = useTableState({
     shallow: true,
     defaultFilters: {
-      academicYear: "2026-2027",
-      semester: "first",
+      academicYear: "",
+      semester: "",
       component: "all",
       status: "all",
       tab: "all",
     },
   });
 
-  const academicYear = filters.academicYear || "2026-2027";
-  const semester = (filters.semester || "first") as Semester;
+  const academicYear = filters.academicYear || years.data?.currentYear || "";
+  const semester = (filters.semester || years.data?.currentSemester || "first") as Semester;
   const componentFilter = filters.component || "all";
   const statusFilter = filters.status || "all";
   const activeTab = filters.tab || "all";
@@ -135,6 +136,7 @@ function ControlPetitionsContent() {
   const { data: summary } = useQuery({
     queryKey: controlKeys.petitionsSummary({ academicYear, semester }),
     queryFn: () => getControlPetitionsSummary({ academicYear, semester }),
+    enabled: Boolean(academicYear),
   });
 
   const queryParams = useMemo(
@@ -171,6 +173,7 @@ function ControlPetitionsContent() {
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: controlKeys.petitions(queryParams),
     queryFn: () => listControlPetitions(queryParams),
+    enabled: Boolean(academicYear),
   });
 
   const [selectedPetition, setSelectedPetition] =
@@ -520,13 +523,11 @@ function ControlPetitionsContent() {
           }
           wrapFilters
         >
-          <div className="w-36">
-            <Input
-              dir="ltr"
+          <div className="w-full sm:w-40">
+            <AcademicYearSelect
               value={academicYear}
-              onChange={(e) => setFilter("academicYear", e.target.value)}
-              placeholder="2026-2027"
-              className="h-10 rounded-squircle text-left font-mono text-xs"
+              onChange={(year) => setFilter("academicYear", year)}
+              showLabel={false}
             />
           </div>
           <div className="w-44">

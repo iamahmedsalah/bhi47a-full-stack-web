@@ -48,6 +48,11 @@ export class StudentCodeAdminService {
           .findOne({ studentCode: code })
           .session(session)
           .lean();
+        if (entry?.protectedAt)
+          codeConflict(
+            'CODE_PERMANENT',
+            'This student code is permanently assigned.',
+          );
         if (snapshot.mappingConflict)
           codeConflict(
             'CODE_YEAR_NOT_READY',

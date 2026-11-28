@@ -53,7 +53,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/public/admissions/status') return send({ publicReference: reference, status: 'REJECTED', rejection: { reasonCode: 'CAPACITY', explanation: '' } });
     if (url.pathname === '/admin/admissions/requests') return send(list([applicant]));
     if (url.pathname === `/admin/admissions/requests/${id}`) return send(applicant);
-    if (url.pathname === `/admin/admissions/requests/${id}/approve`) { if (approvalConflict) return send({ code: typeof approvalConflict === 'string' ? approvalConflict : 'ADMISSION_CONFLICT', message: 'The request changed.' }, 409); applicant = { ...applicant, status: 'APPROVED', revision: 1, studentCode: '270101', studentId: '100000000000000000000030' }; return send(applicant); }
+    if (url.pathname === `/admin/admissions/requests/${id}/approve`) { if (approvalConflict) return send({ code: typeof approvalConflict === 'string' ? approvalConflict : 'ADMISSION_CONFLICT', message: 'The request changed.' }, 409); applicant = { ...applicant, status: 'APPROVED', revision: 1, studentCode: '270101', studentId: '100000000000000000000030', ...(applicant.lifecycleEnabled ? { ministryStatus: 'PENDING', officialEnrollmentStatus: 'PROVISIONAL' } : {}) }; return send(applicant); }
     if (url.pathname === '/admin/admissions/groups') return send(list([]));
     if (url.pathname === '/admin/admissions/periods') return send(list(periodDeleted ? [] : [{ _id: periodId, code: 'INTAKE27', academicYear: '2026-2027', name: 'Synthetic intake', nameAr: 'دفعة تجريبية', isEnabled: true, opensAt: '2026-10-01T00:00:00Z', closesAt: '2026-12-01T00:00:00Z', status: 'open', revision: 0 }]));
     if (url.pathname === `/admin/admissions/periods/${periodId}` && req.method === 'DELETE') { periodDeleted = true; return send({ success: true, deletedId: periodId }); }
@@ -185,6 +185,24 @@ try {
     mappingCorrected = false;
     await page.getByText('270101', { exact: true }).waitFor();
     await page.screenshot({ path: path.join(output, `admin-${locale}.png`), fullPage: true });
+    const legacyApplicant = applicant;
+    applicant = { ...legacyApplicant, status: 'PENDING', revision: 0, studentCode: undefined, studentId: undefined, lifecycleEnabled: true, studentType: 'TRANSFER', previousInstitution: 'Synthetic institution' };
+    await page.goto(`${address}/${locale}/admin/admissions?tab=requests&queue=review`);
+    await page.getByRole('button', { name: t.lifecycle.review, exact: true }).click();
+    const transferDialog = page.getByRole('dialog');
+    await transferDialog.getByRole('button', { name: t.lifecycle.action['request-correction'], exact: true }).waitFor();
+    await transferDialog.getByRole('button', { name: t.approve, exact: true }).click();
+    await transferDialog.getByRole('checkbox', { name: t.confirmApproval, exact: true }).check();
+    await transferDialog.getByRole('button', { name: t.approve, exact: true }).click();
+    await transferDialog.waitFor({ state: 'hidden' });
+    assert.equal(writes.at(-1).body.ministryStatus, 'PENDING');
+    assert.equal(writes.at(-1).body.level, '2');
+    await page.getByRole('button', { name: t.lifecycle.queue.transfers, exact: true }).click();
+    await page.waitForURL('**queue=transfers*');
+    await page.getByRole('button', { name: t.lifecycle.queue.transfers, pressed: true, exact: true }).waitFor();
+    await page.getByText(t.lifecycle.pending, { exact: true }).waitFor();
+    await page.screenshot({ path: path.join(output, `provisional-${locale}.png`), fullPage: true });
+    applicant = legacyApplicant;
     await page.goto(`${address}/${locale}/admin/admissions?tab=requests&staff=1`); await page.getByText(reference, { exact: true }).waitFor();
     await page.getByRole('button', { name: t.actions, exact: true }).click(); assert.equal(await page.getByRole('menuitem', { name: t.deleteRequest, exact: true }).count(), 0); await page.keyboard.press('Escape');
     await page.goto(`${address}/${locale}/admin/admissions?tab=periods&staff=1`); await page.getByText('INTAKE27', { exact: true }).waitFor(); await page.getByRole('button', { name: p.actions, exact: true }).click(); assert.equal(await page.getByRole('menuitem', { name: p.delete, exact: true }).count(), 0); await page.keyboard.press('Escape');
@@ -222,7 +240,7 @@ try {
     await linkedStudent.waitFor({ state: 'hidden' });
     assert.equal(await page.getByText('100000000000000000000030', {exact:true}).count(), 0, 'internal student IDs must not appear in the audit table');
     await page.getByRole('button', {name:codeMessages.actionsFor.replace('{code}','270102'),exact:true}).click();
-    await page.getByRole('menuitem', {name:codeMessages.hold,exact:true}).click();
+    await page.getByRole('menuitem', {name:codeMessages.holdPreviousOwner,exact:true}).click();
     const hold = page.getByRole('dialog');
     await hold.getByLabel(codeMessages.fields.reason,{exact:true}).fill('Reviewed missing original student against historical records.');
     await hold.getByRole('checkbox', {name:codeMessages.confirmed,exact:true}).check();

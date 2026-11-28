@@ -33,12 +33,16 @@ import {
   ToggleRegistrationTermDto,
 } from './dto/registration.dto';
 import { RegistrationsService } from './registrations.service';
+import { RegistrationTermService } from './services/registration-term.service';
 import type { AdvisingCourseMapResponse } from './registrations.service';
 
 @ApiTags('Course Registration')
 @Controller()
 export class RegistrationsController {
-  constructor(private readonly registrationsService: RegistrationsService) {}
+  constructor(
+    private readonly registrationsService: RegistrationsService,
+    private readonly registrationTerms: RegistrationTermService,
+  ) {}
 
   @Get('registration/eligibility')
   @Roles('student')
@@ -313,6 +317,26 @@ export class RegistrationsController {
   @ApiOperation({ summary: 'List managed academic years and usage counts' })
   listAcademicYears() {
     return this.registrationsService.listAcademicYears();
+  }
+
+  @Get('admin/academic-years/options')
+  @Roles('admin', 'staff')
+  @RequireAnyPermissions(
+    PERMISSIONS.REGISTRATION_READ,
+    PERMISSIONS.REGISTRATION_WRITE,
+    PERMISSIONS.STUDENTS_WRITE,
+    PERMISSIONS.COURSES_STUDENT_ENROLLMENT_MANAGE,
+    PERMISSIONS.EXAM_SCHEDULES_WRITE,
+    PERMISSIONS.ANALYTICS_EXPORT,
+    PERMISSIONS.CONTROL_SHEETS_VIEW,
+    PERMISSIONS.CONTROL_PETITIONS_CREATE,
+    PERMISSIONS.CONTROL_PETITIONS_APPROVE,
+    PERMISSIONS.GRADES_PUBLISH,
+    PERMISSIONS.GRADES_WRITE,
+    PERMISSIONS.GRADES_HISTORICAL_PUBLISH,
+  )
+  academicYearOptions() {
+    return this.registrationTerms.academicYearOptions();
   }
 
   @Post('admin/academic-years')

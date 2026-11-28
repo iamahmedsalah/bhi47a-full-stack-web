@@ -1658,6 +1658,11 @@ export default function StudentQuizzesPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6" dir={isEnglish ? 'ltr' : 'rtl'}>
+      {onlineQuizzesQuery.data?.quizzes.some((quiz) => quiz.provisional && quiz.publishResults) && (
+        <p role="status" className="rounded-xl border border-warning/30 p-3 text-sm">
+          {isAr ? 'درجات الكويزات المنشورة استرشادية لحين تأكيد القيد.' : 'Published quiz scores are provisional until enrollment is confirmed.'}
+        </p>
+      )}
       {/* Title */}
       <div className="space-y-1">
         <h2 className="flex items-center gap-2 text-2xl font-bold text-foreground">

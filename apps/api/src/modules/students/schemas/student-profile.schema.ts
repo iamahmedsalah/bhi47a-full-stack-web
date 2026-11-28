@@ -3,6 +3,11 @@ import { Schema as MongooseSchema } from 'mongoose';
 import type { Document, Types } from 'mongoose';
 import {
   ENROLLMENT_STATUS_VALUES,
+  MINISTRY_STATUSES,
+  OFFICIAL_ENROLLMENT_STATUSES,
+  type AdmissionType,
+  type MinistryStatus,
+  type OfficialEnrollmentStatus,
   type EnrollmentStatus,
 } from '@student-portal/shared';
 
@@ -77,6 +82,17 @@ export class StudentProfile {
   })
   enrollmentStatus!: EnrollmentStatus;
 
+  @Prop({ type: String, enum: ['COORDINATION', 'TRANSFER'] })
+  admissionType?: AdmissionType;
+
+  @Prop({ type: String, enum: MINISTRY_STATUSES })
+  ministryStatus?: MinistryStatus;
+
+  @Prop({ type: String, enum: OFFICIAL_ENROLLMENT_STATUSES })
+  officialEnrollmentStatus?: OfficialEnrollmentStatus;
+
+  @Prop() enrollmentEffectiveDate?: string;
+
   @Prop({ trim: true })
   seatNumber?: string;
 
@@ -119,6 +135,11 @@ StudentProfileSchema.index({ studentCode: 1 }, { unique: true });
 // Compound ESR Indexes (Equality -> Sort -> Range)
 StudentProfileSchema.index({ level: 1, enrollmentStatus: 1, createdAt: -1 });
 StudentProfileSchema.index({ enrollmentStatus: 1, createdAt: -1 });
+StudentProfileSchema.index({
+  officialEnrollmentStatus: 1,
+  ministryStatus: 1,
+  academicYear: 1,
+});
 StudentProfileSchema.index({ createdAt: -1 });
 StudentProfileSchema.index({ department: 1, level: 1, createdAt: -1 });
 StudentProfileSchema.index({ enrollmentStatus: 1, level: 1 });

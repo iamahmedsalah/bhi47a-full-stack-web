@@ -198,7 +198,9 @@ describe('private teaching file storage', () => {
 
   it('returns a controlled error when a file is missing', async () => {
     const result = await storage.save(await upload(), true);
+    expect(await storage.exists(result)).toBe(true);
     await storage.removeUncommitted(result);
+    expect(await storage.exists(result)).toBe(false);
     await expect(storage.deliver(result, {} as never)).rejects.toThrow(
       'missing',
     );

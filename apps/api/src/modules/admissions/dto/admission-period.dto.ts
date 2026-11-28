@@ -46,6 +46,13 @@ class PeriodFieldsDto {
   @Transform(({ obj }: { obj: Record<string, unknown> }) => obj.isEnabled)
   @IsBoolean()
   isEnabled?: boolean;
+
+  @ValidateIf(supplied)
+  @Transform(
+    ({ obj }: { obj: Record<string, unknown> }) => obj.lifecycleEnabled,
+  )
+  @IsBoolean()
+  lifecycleEnabled?: boolean;
 }
 
 export class CreateAdmissionPeriodDto extends PeriodFieldsDto {

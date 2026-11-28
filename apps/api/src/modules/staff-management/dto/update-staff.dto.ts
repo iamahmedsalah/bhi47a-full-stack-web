@@ -35,6 +35,14 @@ export class UpdateStaffDto {
   @IsOptional()
   @IsArray()
   @ArrayUnique()
+  @ArrayMaxSize(100)
+  @IsMongoId({ each: true })
+  gradeEntryCourseIds?: string[];
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
   @IsIn(STAFF_ASSIGNABLE_PERMISSIONS, { each: true })
   permissions?: string[];
 

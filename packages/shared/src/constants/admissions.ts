@@ -15,6 +15,7 @@ export interface AdmissionPeriodInput {
   opensAt: string;
   closesAt: string;
   isEnabled?: boolean;
+  lifecycleEnabled?: boolean;
 }
 
 export interface AdmissionPeriodItem extends AdmissionPeriodInput {

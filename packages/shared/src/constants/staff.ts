@@ -2,6 +2,8 @@ export const STAFF_TYPES = {
   DOCTOR: 'doctor',
   ASSISTANT_LECTURER: 'assistant_lecturer',
   TEACHING_ASSISTANT: 'teaching_assistant',
+  DEAN: 'dean',
+  CONTROL: 'control',
   ACCOUNTANT: 'accountant',
   ADMINISTRATIVE: 'administrative',
 } as const;
@@ -9,6 +11,32 @@ export const STAFF_TYPES = {
 export type StaffType = (typeof STAFF_TYPES)[keyof typeof STAFF_TYPES];
 
 export const STAFF_TYPE_VALUES: StaffType[] = Object.values(STAFF_TYPES);
+
+/**
+ * Faculty members (هيئة التدريس): Doctors, Associate Professors, and Full Professors.
+ * Automatically authorized and required to enter grades for their assigned courses.
+ */
+export function isFacultyMember(staffType?: string | null): boolean {
+  return (staffType ?? '').trim().toLowerCase() === 'doctor';
+}
+
+/**
+ * Supporting academic staff (الهيئة المعاونة): Assistant Lecturers and Teaching Assistants.
+ * Excluded from Control grade entry by default unless explicitly granted per-course.
+ */
+export function isSupportingAcademicStaff(staffType?: string | null): boolean {
+  return ['assistant_lecturer', 'teaching_assistant', 'assistant', 'ta'].includes(
+    (staffType ?? '').trim().toLowerCase(),
+  );
+}
+
+/**
+ * Any academic teaching participant (Faculty + Supporting Academic Staff) eligible
+ * for course assignments, schedules, attendance, and practical sections.
+ */
+export function isAcademicTeachingStaff(staffType?: string | null): boolean {
+  return isFacultyMember(staffType) || isSupportingAcademicStaff(staffType);
+}
 
 export const DOCTOR_PREFIXES = {
   DR: 'dr',
@@ -101,7 +129,7 @@ export function getStaffPrefix(
   if (typeof staffOrType === 'object') {
     staffType = staffOrType.staffType ?? null;
     titlePrefix = explicitDoctorPrefix ?? staffOrType.titlePrefix ?? null;
-    if (!titlePrefix && staffType === 'doctor') {
+    if (!titlePrefix && (staffType === 'doctor' || staffType === 'dean')) {
       titlePrefix =
         inferDoctorPrefix(staffOrType.nameAr) ||
         inferDoctorPrefix(staffOrType.name) ||
@@ -129,6 +157,18 @@ export function getStaffPrefix(
         return isAr ? 'أ.م.' : 'Assoc. Prof.';
       }
       return isAr ? 'د.' : 'Dr.';
+    }
+    case 'dean': {
+      if (titlePrefix === 'prof' || titlePrefix === 'prof_dr') {
+        return isAr ? 'أ.د.' : 'Prof. Dr.';
+      }
+      if (titlePrefix === 'assoc_prof') {
+        return isAr ? 'أ.م.' : 'Assoc. Prof.';
+      }
+      if (titlePrefix === 'dr') {
+        return isAr ? 'د.' : 'Dr.';
+      }
+      return '';
     }
     case 'assistant_lecturer':
       return isAr ? 'م. م' : 'A.L.';
@@ -209,11 +249,15 @@ export function getStaffRoleLabel(
       }
       return isAr ? 'أستاذ مقرر (دكتور)' : 'Course Doctor / Lecturer';
     case 'assistant_lecturer':
-      return isAr ? 'مدرس مساعد (هيئة تدريس)' : 'Assistant Lecturer';
+      return isAr ? 'مدرس مساعد (هيئة معاونة)' : 'Assistant Lecturer';
     case 'teaching_assistant':
     case 'assistant':
     case 'ta':
-      return isAr ? 'معيد (هيئة تدريس)' : 'Teaching Assistant';
+      return isAr ? 'معيد (هيئة معاونة)' : 'Teaching Assistant';
+    case 'dean':
+      return isAr ? 'عميد المعهد' : 'Institute Dean';
+    case 'control':
+      return isAr ? 'مسؤول الكنترول' : 'Control Officer';
     case 'accountant':
       return isAr ? 'محاسب (شؤون مالية)' : 'Accountant (Finance)';
     default:

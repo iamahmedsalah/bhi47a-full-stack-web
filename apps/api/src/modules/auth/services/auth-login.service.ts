@@ -100,7 +100,7 @@ export class AuthLoginService {
       this.metricsService?.recordLoginAttempt('invalid_credentials');
       throw new UnauthorizedException('بيانات الدخول غير صحيحة');
     }
-    if (!user.isActive) {
+    if (!user.isActive || user.admissionArchivedAt) {
       this.metricsService?.recordLoginAttempt('invalid_credentials');
       throw new UnauthorizedException('الحساب غير مفعّل');
     }
@@ -187,7 +187,7 @@ export class AuthLoginService {
       this.metricsService?.recordLoginAttempt('invalid_credentials');
       throw new UnauthorizedException('بيانات الدخول غير صحيحة');
     }
-    if (!user.isActive) {
+    if (!user.isActive || user.admissionArchivedAt) {
       this.metricsService?.recordLoginAttempt('invalid_credentials');
       throw new UnauthorizedException('الحساب غير مفعّل');
     }
@@ -319,7 +319,7 @@ export class AuthLoginService {
       });
     }
 
-    if (!user.isActive) {
+    if (!user.isActive || user.admissionArchivedAt) {
       throw new UnauthorizedException({
         code: 'ACCOUNT_INACTIVE',
         message: 'الحساب معطل. يرجى مراجعة إدارة شؤون الطلاب.',

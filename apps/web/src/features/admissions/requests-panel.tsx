@@ -4,6 +4,7 @@ import { getAdmissionErrorMessage } from "./admission-error";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWatch, useForm } from "react-hook-form";
+import { AcademicYearChoice } from "./academic-year-choice";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -13,6 +14,7 @@ import {
   admissionYearPrefix,
   type AdmissionRequestItem,
   type AdmissionGroupItem,
+  type AdmissionQueue,
 } from "@student-portal/shared";
 import { useTableState } from "@/hooks/use-table-state";
 import {
@@ -43,6 +45,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { cairoDateTimeToIso } from "@/lib/cairo-time";
 
 import { ApplicantForm } from "./applicant-form";
+import { AdmissionLifecycleForm, MinistryEvidenceFields, type EvidenceInput } from "./lifecycle-form";
 import {
   admissionAction,
   admissionDetail,
@@ -50,6 +53,8 @@ import {
   admissionList,
   admissionUpdate,
   admissionDeleteRequest,
+  downloadAdmissionDecision,
+  uploadAdmissionDecision,
 } from "./workflow-api";
 import {
   AdmissionDialog,
@@ -61,7 +66,7 @@ import {
   useAdmissionUI,
 } from "./workflow-ui";
 
-export function AdmissionRequests() {
+export function AdmissionRequests({ queue = 'all' }: { queue?: AdmissionQueue | 'all' } = {}) {
   const { t, can, date, userId, locale, isAdmin } = useAdmissionUI(),
     state = useTableState({
       defaultFilters: { status: "ALL", academicYear: "", from: "", to: "" },
@@ -85,7 +90,8 @@ export function AdmissionRequests() {
     page: state.page,
     limit: state.limit,
     search: state.search || undefined,
-    status: state.filters.status === "ALL" ? undefined : state.filters.status,
+    queue: queue === 'all' ? undefined : queue,
+    status: queue !== 'all' || state.filters.status === "ALL" ? undefined : state.filters.status,
     academicYear: state.filters.academicYear || undefined,
     from: state.filters.from
       ? (cairoDateTimeToIso(`${state.filters.from}T00:00`) ??
@@ -102,6 +108,7 @@ export function AdmissionRequests() {
     refetchOnReconnect: "always",
   });
   const refresh = async () => {
+    await client.invalidateQueries({ queryKey: ['admission-enrollment-summary'] });
     await client.invalidateQueries({ queryKey: ["admission-requests"] });
     await client.invalidateQueries({ queryKey: ["admission-detail"] });
     await client.invalidateQueries({ queryKey: ["admission-groups"] });
@@ -273,7 +280,7 @@ export function AdmissionRequests() {
           <TableCell className="min-w-[120px] py-2.5 px-3 text-center">
             <div>
               <StatusBadge
-                label={t(`status.${row.status}`)}
+                label={row.ministryStatus === 'REJECTED' ? t('lifecycle.rejected') : row.officialEnrollmentStatus === 'PROVISIONAL' ? t(`lifecycle.${row.ministryStatus === 'APPROVED' ? 'ready' : 'pending'}`) : row.officialEnrollmentStatus === 'ENROLLED' ? t('lifecycle.enrolled') : t(`status.${row.status}`)}
                 variant={
                   row.status === "APPROVED"
                     ? "success"
@@ -315,7 +322,7 @@ export function AdmissionRequests() {
         render: (row) => (
           <TableCell className="min-w-[150px] text-center">
             <div className="flex items-center justify-end gap-2">
-              {["PENDING", "WAITLISTED"].includes(row.status) &&
+              {row.lifecycleEnabled ? <Button size="sm" variant="outline" onClick={() => setSelected({ id: row._id, action: 'view' })}>{t('lifecycle.review')}</Button> : ["PENDING", "WAITLISTED"].includes(row.status) &&
                 can(PERMISSIONS.ADMISSIONS_REQUESTS_APPROVE) &&
                 can(PERMISSIONS.ADMISSIONS_ACADEMIC_MANAGE) && (
                   <Button
@@ -487,7 +494,7 @@ export function AdmissionRequests() {
         onSearchChange={setSearch}
         searchPlaceholder={t("search")}
       >
-        <div className="w-full shrink-0 sm:w-[160px]">
+        {queue === 'all' && <div className="w-full shrink-0 sm:w-[160px]">
           <Select
             value={state.filters.status || "ALL"}
             onValueChange={(value) => state.setFilter("status", value)}
@@ -511,18 +518,16 @@ export function AdmissionRequests() {
               ))}
             </SelectContent>
           </Select>
-        </div>
+        </div>}
 
-        <AdmissionInput
-          aria-label={t("fields.academicYear")}
-          placeholder="2026-2027"
-          dir="ltr"
-          className="h-10 w-[120px] rounded-squircle text-left"
-          value={state.filters.academicYear ?? ""}
-          onChange={(event) =>
-            state.setFilter("academicYear", event.target.value)
-          }
-        />
+        <div className="w-full shrink-0 sm:w-44">
+          <AcademicYearChoice
+            value={state.filters.academicYear ?? ""}
+            onChange={(value) => state.setFilter("academicYear", value)}
+            showLabel={false}
+            includeAll
+          />
+        </div>
 
         <DatePicker
           value={(state.filters.from ?? "").slice(0, 10)}
@@ -638,6 +643,7 @@ export function AdmissionRequests() {
           key={`${selected.id}:${selected.action}`}
           id={selected.id}
           action={selected.action}
+          onAction={(action) => setSelected({ id: selected.id, action })}
           onClose={() => setSelected(null)}
           onSaved={async () => {
             await refresh();
@@ -667,13 +673,15 @@ function RequestDialog({
   action,
   onClose,
   onSaved,
+  onAction,
 }: {
   id: string;
   action: string;
   onClose: () => void;
   onSaved: () => Promise<void>;
+  onAction: (action: string) => void;
 }) {
-  const { t, date, locale, userId } = useAdmissionUI();
+  const { t, date, locale, userId, can } = useAdmissionUI();
   const query = useQuery({
     queryKey: ["admission-detail", id, userId],
     queryFn: () => admissionDetail(id),
@@ -687,6 +695,20 @@ function RequestDialog({
     ? item?.fullNameAr || item?.fullName
     : item?.fullName;
   const secondaryName = isAr ? item?.fullName : item?.fullNameAr;
+  const correctionPermission = can(PERMISSIONS.ADMISSIONS_REQUESTS_UPDATE);
+  const ministryPermission = can(PERMISSIONS.ADMISSIONS_MINISTRY_MANAGE);
+  const preApproval = Boolean(item && ['PENDING', 'WAITLISTED'].includes(item.status));
+  const transfer = item?.studentType === 'TRANSFER';
+  const rejected = item?.ministryStatus === 'REJECTED';
+  const decisionButtons = [
+    ...(preApproval && correctionPermission ? [{ action: 'update', label: t('edit') }, { action: 'request-correction', label: t('lifecycle.action.request-correction') }] : []),
+    ...(preApproval && can(PERMISSIONS.ADMISSIONS_REQUESTS_APPROVE) && can(PERMISSIONS.ADMISSIONS_ACADEMIC_MANAGE) ? [{ action: 'approve', label: t('approve') }] : []),
+    ...(preApproval && can(PERMISSIONS.ADMISSIONS_REQUESTS_REJECT) ? [{ action: 'reject', label: t('reject') }] : []),
+    ...(transfer && ministryPermission && !rejected && (preApproval || item?.officialEnrollmentStatus === 'PROVISIONAL' || item?.officialEnrollmentStatus === 'ENROLLED') ? [{ action: 'REJECT_MINISTRY', label: t('lifecycle.action.REJECT_MINISTRY') }] : []),
+    ...(item?.ministryStatus === 'PENDING' && ministryPermission ? [{ action: 'APPROVE_MINISTRY', label: t('lifecycle.action.APPROVE_MINISTRY') }] : []),
+    ...(item?.ministryStatus === 'APPROVED' && item.officialEnrollmentStatus === 'PROVISIONAL' && can(PERMISSIONS.ADMISSIONS_ENROLLMENT_CONFIRM) ? [{ action: 'CONFIRM_ENROLLMENT', label: t('lifecycle.action.CONFIRM_ENROLLMENT') }] : []),
+    ...(rejected && can(PERMISSIONS.ADMISSIONS_DECISIONS_CORRECT) ? [{ action: 'CORRECT_MINISTRY', label: t('lifecycle.action.CORRECT_MINISTRY') }] : []),
+  ];
 
   return (
     <AdmissionDialog
@@ -703,10 +725,26 @@ function RequestDialog({
               ? isAr
                 ? "تعديل بيانات طلب الالتحاق"
                 : "Edit Admission Application"
-              : t(action)
+              : ['APPROVE_MINISTRY', 'REJECT_MINISTRY', 'CONFIRM_ENROLLMENT', 'CORRECT_MINISTRY', 'request-correction'].includes(action)
+                ? t(`lifecycle.action.${action}`) : t(action)
       }
       description={primaryName}
     >
+      {item?.lifecycleEnabled && action === 'view' && <div className="space-y-3 rounded-xl border p-3">
+        {item.officialEnrollmentStatus && <p className="font-medium">{t(`lifecycle.${rejected ? 'rejected' : item.officialEnrollmentStatus === 'ENROLLED' ? 'enrolled' : item.ministryStatus === 'APPROVED' ? 'ready' : 'pending'}`)}</p>}
+        {item.correctionInstructions && <p>{item.correctionInstructions}</p>}
+        {decisionButtons.length > 0 && <div className="flex flex-wrap gap-2">
+          {decisionButtons.map(({ action: next, label }, index) => <Button key={next} type="button" variant={index === 0 ? 'default' : 'outline'} onClick={() => onAction(next)}>{label}</Button>)}
+        </div>}
+        {item.history.map((event) => {
+          const evidence = event.details?.ministryEvidence as { documentId: string; reference: string; decisionDate: string } | undefined;
+          if (!evidence || !(ministryPermission || can(PERMISSIONS.ADMISSIONS_ARCHIVE_READ) || can(PERMISSIONS.ADMISSIONS_DECISIONS_CORRECT))) return null;
+          return <div key={event.revision} className="flex items-center gap-2 text-sm">
+            <Button type="button" variant="outline" size="sm" onClick={() => void downloadAdmissionDecision(item._id, evidence.documentId).catch(() => toast.error(t('invalid')))}>{t('lifecycle.document')}</Button>
+            <bdi>{evidence.reference} · {evidence.decisionDate}</bdi>
+          </div>;
+        })}
+      </div>}
       {query.isLoading ? (
         <div className="flex flex-col items-center justify-center p-8 gap-3">
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -1000,6 +1038,8 @@ function RequestDialog({
               </div>
             ) : action === "approve" ? (
               <ApprovalForm item={item} onSaved={onSaved} onReload={async () => { await query.refetch(); }} />
+            ) : ['APPROVE_MINISTRY', 'REJECT_MINISTRY', 'CONFIRM_ENROLLMENT', 'CORRECT_MINISTRY', 'request-correction'].includes(action) ? (
+              <AdmissionLifecycleForm key={`${action}:${item.revision}`} item={item} action={action} onSaved={onSaved} />
             ) : (
               <DecisionForm item={item} action={action} onSaved={onSaved} />
             )}
@@ -1022,6 +1062,12 @@ function ApprovalForm({
     [error, setError] = useState(""),
     [errorCode, setErrorCode] = useState<string | undefined>(),
     [confirmed, setConfirmed] = useState(false);
+  const managed = item.lifecycleEnabled === true;
+  const transfer = item.studentType === 'TRANSFER';
+  const [ministry, setMinistry] = useState<'PENDING' | 'APPROVED'>('PENDING');
+  const [evidence, setEvidence] = useState<EvidenceInput>({ reference: '', decisionDate: '' });
+  const [effectiveDate, setEffectiveDate] = useState('');
+  const needsDocument = managed && transfer && ministry === 'APPROVED';
   const schema = z.object({
     level: z.enum(["1", "2", "3", "4"]),
     semester: z.enum(["1", "2"]),
@@ -1032,7 +1078,7 @@ function ApprovalForm({
   const form = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
     defaultValues: {
-      level: "1",
+      level: managed && transfer ? "2" : "1",
       semester: "1",
       department: "GENERAL",
       groupId: "NONE",
@@ -1063,6 +1109,7 @@ function ApprovalForm({
         setError("");
         setErrorCode(undefined);
         try {
+          const attachment = needsDocument && evidence.file ? await uploadAdmissionDecision(item._id, evidence.file) : undefined;
           await admissionAction(item._id, "approve", {
             ...values,
             groupId: values.groupId === "NONE" ? undefined : values.groupId,
@@ -1072,6 +1119,9 @@ function ApprovalForm({
               .filter(Boolean),
             revision: item.revision,
             confirmed: true,
+            ...(managed ? { ministryStatus: transfer ? ministry : undefined,
+              ministryEvidence: attachment ? { reference: evidence.reference, decisionDate: evidence.decisionDate, documentId: attachment.documentId } : undefined,
+              enrollmentEffectiveDate: effectiveDate || undefined } : {}),
           });
           await onSaved();
         } catch (e) {
@@ -1083,6 +1133,7 @@ function ApprovalForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <Choice
           label={t("fields.level")}
+          disabled={managed}
           value={(watchedForm.level ?? '')}
           onChange={(value) => form.setValue("level", value as "1")}
           options={["1", "2", "3", "4"].map((value) => ({
@@ -1105,6 +1156,7 @@ function ApprovalForm({
         >
           <AdmissionInput
             dir="ltr"
+            readOnly={managed}
             className="text-left"
             {...form.register("department")}
           />
@@ -1142,6 +1194,14 @@ function ApprovalForm({
           ]}
         />
       )}
+      {managed && transfer && <Choice label={t('lifecycle.ministry')} value={ministry} onChange={(value) => {
+        setMinistry(value as 'PENDING' | 'APPROVED');
+        setEffectiveDate('');
+      }} options={[{ value: 'PENDING', label: t('lifecycle.pending') }, ...(can(PERMISSIONS.ADMISSIONS_MINISTRY_MANAGE) ? [{ value: 'APPROVED', label: t('lifecycle.approved') }] : [])]} />}
+      {needsDocument && <MinistryEvidenceFields value={evidence} onChange={setEvidence} />}
+      {managed && (!transfer || (ministry === 'APPROVED' && can(PERMISSIONS.ADMISSIONS_ENROLLMENT_CONFIRM))) && <Field label={t('lifecycle.effectiveDate')}>
+        <DatePicker value={effectiveDate} onChange={setEffectiveDate} locale={locale} placeholder={t('lifecycle.effectiveDate')} />
+      </Field>}
       <p>{t("approvalNotice")}</p>
       <label className="flex items-center gap-2">
         <Checkbox
@@ -1174,6 +1234,8 @@ function ApprovalForm({
           type="submit"
           disabled={
             !confirmed ||
+            (managed && !transfer && (!effectiveDate || !can(PERMISSIONS.ADMISSIONS_ENROLLMENT_CONFIRM))) ||
+            (needsDocument && (!evidence.file || evidence.reference.trim().length < 2 || !evidence.decisionDate)) ||
             form.formState.isSubmitting ||
             item.duplicateReviewRequired
           }

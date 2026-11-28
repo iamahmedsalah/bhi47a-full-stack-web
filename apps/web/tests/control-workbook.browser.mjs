@@ -75,7 +75,7 @@ const server = http.createServer(async (req,res)=>{
         if(body.expectedSchemeVersion!==schemeVersion){res.statusCode=409;return res.end(JSON.stringify({code:'SCHEME_CHANGED',message:'Synthetic scheme changed'}));}
         if(denySave){res.statusCode=503;return res.end(JSON.stringify({message:'Synthetic save failure'}));}
         writes++;
-        const results=body.changes.map(change=>{const row=rows.find(r=>r.studentId===change.studentId);const entry={studentId:row.studentId,score:change.score,status:change.status||'present',rev:(row.components[key]?.rev||0)+1,isPublished:false,attendanceMark:change.attendanceMark,quizzesMark:change.quizzesMark};row.components[key]=entry;return {studentId:row.studentId,opId:change.opId,result:'ok',entry};});
+        const results=body.changes.map(change=>{const row=rows.find(r=>r.studentId===change.studentId);const entry={studentId:row.studentId,score:change.score,status:change.status??(change.score==null?null:'present'),rev:(row.components[key]?.rev||0)+1,isPublished:false,attendanceMark:change.attendanceMark,quizzesMark:change.quizzesMark};row.components[key]=entry;return {studentId:row.studentId,opId:change.opId,result:'ok',entry};});
         states[key].revision++;return res.end(JSON.stringify({results,summary:{ok:results.length,invalid:0,conflict:0,forbidden:0}}));
       }
       if(url.pathname.endsWith('/review')) {assert.equal(body.reason,undefined,'workflow does not send a reason');assert.equal(body.allowMissing,true,'blank entries require explicit confirmation');assert.equal(body.expectedRevision,states[key].revision,'workflow must use the current sheet revision after autosave');states[key].revision++;states[key].workflowState=body.action==='SUBMIT'?'IN_REVIEW':body.action==='SUBMIT_APPROVAL'?'PENDING_APPROVAL':body.action==='APPROVE'?'APPROVED':'DRAFT';return res.end(JSON.stringify(detail(key)));}
@@ -169,6 +169,7 @@ try {
   assert.equal(await midtermStatusMenu.getByRole('option',{name:'Incomplete',exact:true}).count(),0);
   await bannedMidterm.click();
   await page.getByRole('status').getByText(/All changes saved/).waitFor();
+  await page.getByRole('status').filter({hasText:/All changes saved/}).locator('svg[aria-hidden="true"]').waitFor();
   assert.equal(rows[0].components.midterm.status,'banned');
   assert.equal(rows[0].components.midterm.score,null);
   await midtermRate.getByText('33.33%',{exact:true}).waitFor();
@@ -178,6 +179,9 @@ try {
   await page.getByRole('status').getByText(/All changes saved/).waitFor();
   assert.equal(rows[0].components.midterm.status,'absent');
   await midtermRate.getByText('50.00%',{exact:true}).waitFor();
+  await mark.fill('');
+  assert.equal(await mark.inputValue(), '0', 'deleting the displayed zero does not unset an explicit absence');
+  assert.equal(rows[0].components.midterm.status,'absent');
   await page.goto(`${base}/en/admin/control/${ids.final}`);
   await page.getByRole('textbox',{name:'260001 Final',exact:true}).waitFor();
   assert.equal(await midtermRate.count(),0,'midterm rate is hidden on the final tab');
@@ -214,10 +218,60 @@ try {
   await page.getByRole('button',{name:'Retry save',exact:true}).click();await page.getByRole('status').getByText(/All changes saved/).waitFor();assert.equal(rows[0].components.midterm.score,16);
   schemeVersion=2;await mark.fill('15');await page.getByRole('button',{name:'Refresh scheme; keep my draft',exact:true}).waitFor();assert.equal(await mark.inputValue(),'15');
   await page.getByRole('button',{name:'Refresh scheme; keep my draft',exact:true}).click();await page.getByRole('button',{name:'Retry save',exact:true}).click();await page.getByRole('status').getByText(/All changes saved/).waitFor();assert.equal(rows[0].components.midterm.score,15);
+  const status = page.getByRole('button',{name:'260001 Component status',exact:true});
+  const recordedRevision = rows[0].components.midterm.rev;
+  await mark.fill('');
+  await status.getByText('Not entered',{exact:true}).waitFor();
+  await page.getByRole('status').getByText(/All changes saved/).waitFor();
+  assert.equal(rows[0].components.midterm.score,null);
+  assert.equal(rows[0].components.midterm.status,null);
+  assert.equal(rows[0].components.midterm.rev,recordedRevision+1);
+  await mark.fill('0');
+  await page.getByRole('status').getByText(/All changes saved/).waitFor();
+  assert.equal(rows[0].components.midterm.score,0);
+  assert.equal(rows[0].components.midterm.status,'present');
+  await mark.fill('15');
+  await page.getByRole('status').getByText(/All changes saved/).waitFor();
+  const beforeClearing = rows[0].components.midterm.rev;
+  await status.click();
+  await page.getByRole('option',{name:'Not entered',exact:true}).click();
+  await page.getByRole('status').getByText(/All changes saved/).waitFor();
+  assert.equal(await mark.inputValue(), '');
+  assert.equal(await status.innerText(), 'Not entered');
+  assert.equal(rows[0].components.midterm.status, null);
+  assert.equal(rows[0].components.midterm.score, null);
+  assert.equal(rows[0].components.midterm.rev, beforeClearing + 1);
+  await page.getByRole('button',{name:'Undo last save',exact:true}).click();
+  await page.getByRole('status').getByText(/All changes saved/).waitFor();
+  assert.equal(rows[0].components.midterm.score,15);
   await page.getByRole('button',{name:'Coursework',exact:true}).click();await page.waitForURL(`**/${ids.coursework}`);
   assert.equal(await midtermRate.count()+await finalRate.count(),0,'exam pass rates are hidden on coursework');
   await page.getByRole('textbox',{name:'260001 Attendance contribution',exact:true}).fill('4');await page.getByRole('textbox',{name:'260001 Quiz contribution',exact:true}).fill('13');
   await page.getByRole('status').getByText(/All changes saved/).waitFor();assert.equal(rows[0].components.coursework.score,17);assert.equal(rows[0].components.coursework.attendanceMark,4);
+  await status.click();
+  await page.getByRole('option',{name:'Not entered',exact:true}).click();
+  await page.getByRole('status').getByText(/All changes saved/).waitFor();
+  assert.equal(await page.getByRole('textbox',{name:'260001 Attendance contribution',exact:true}).inputValue(), '');
+  assert.equal(await page.getByRole('textbox',{name:'260001 Quiz contribution',exact:true}).inputValue(), '');
+  assert.equal(rows[0].components.coursework.status,null);
+  assert.equal(rows[0].components.coursework.attendanceMark,undefined);
+  await page.getByRole('button',{name:'Undo last save',exact:true}).click();
+  await page.getByRole('status').getByText(/All changes saved/).waitFor();
+  assert.equal(rows[0].components.coursework.score,17);
+  const attendance = page.getByRole('textbox',{name:'260001 Attendance contribution',exact:true});
+  const quizzes = page.getByRole('textbox',{name:'260001 Quiz contribution',exact:true});
+  await attendance.fill('');
+  await page.waitForFunction(() => document.querySelector('input[aria-label="260001 Attendance contribution"]')?.getAttribute('aria-invalid')==='true');
+  assert.equal(await quizzes.inputValue(),'13');
+  assert.equal(rows[0].components.coursework.score,17);
+  await quizzes.fill('');
+  await status.getByText('Not entered',{exact:true}).waitFor();
+  await page.getByRole('status').getByText(/All changes saved/).waitFor();
+  assert.equal(rows[0].components.coursework.status,null);
+  assert.equal(rows[0].components.coursework.score,null);
+  await page.getByRole('button',{name:'Undo last save',exact:true}).click();
+  await page.getByRole('status').getByText(/All changes saved/).waitFor();
+  assert.equal(rows[0].components.coursework.score,17);
   await page.getByRole('button',{name:'Toggle fixture editor',exact:true}).evaluate(el=>{el.style.display='none';});
   await page.screenshot({path:path.join(output,'english-workbook.png'),fullPage:true});
   rows[0].tuition={isBlocked:true,status:'unpaid'};

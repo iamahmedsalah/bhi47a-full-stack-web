@@ -230,6 +230,170 @@ describe('ControlAccessService', () => {
     ).toThrow(ForbiddenException);
   });
 
+  it('requires a separate grade grant per course, even with a global read scope', async () => {
+    const otherCourseId = new Types.ObjectId();
+    const teacher = {
+      _id: staffId,
+      name: 'Assistant',
+      role: 'staff' as const,
+      staffType: 'teaching_assistant',
+      permissions: [
+        PERMISSIONS.CONTROL_ACCESS,
+        PERMISSIONS.CONTROL_GRADES_ENTER,
+        PERMISSIONS.CONTROL_SCOPE_ALL,
+      ],
+      mustChangePassword: false,
+      tokenVersion: 1,
+    };
+    let granted = true;
+    const exists = jest.fn((filter: { _id: Types.ObjectId }) => ({
+      lean: () =>
+        Promise.resolve(granted && String(filter._id) === String(courseId)),
+    }));
+    const service = new ControlAccessService({ exists } as never, {} as never);
+    await expect(
+      service.assertCourseGradeWrite(teacher, courseId),
+    ).resolves.toBeUndefined();
+    expect(exists).toHaveBeenCalledWith(
+      expect.objectContaining({
+        _id: courseId,
+        $and: [
+          expect.objectContaining({
+            $or: expect.arrayContaining([
+              { gradeEntryStaffIds: new Types.ObjectId(staffId) },
+            ]),
+          }),
+        ],
+        $or: expect.any(Array),
+      }),
+    );
+    await expect(
+      service.assertCourseGradeWrite(teacher, otherCourseId),
+    ).rejects.toThrow(ForbiddenException);
+    granted = false;
+    await expect(
+      service.assertCourseGradeWrite(teacher, courseId),
+    ).rejects.toThrow(ForbiddenException);
+    await expect(
+      service.assertCourseGradeWrite(
+        { ...teacher, role: 'admin' },
+        otherCourseId,
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  it('automatically authorizes assigned doctors to write grades while isolating TAs strictly to granted courses', async () => {
+    const c1 = new Types.ObjectId();
+    const c2 = new Types.ObjectId();
+    const c3 = new Types.ObjectId();
+    const doctorUser = {
+      _id: staffId,
+      name: 'Dr. Hany',
+      role: 'staff' as const,
+      staffType: 'doctor',
+      permissions: [
+        PERMISSIONS.CONTROL_ACCESS,
+        PERMISSIONS.CONTROL_SHEETS_VIEW,
+        PERMISSIONS.CONTROL_GRADES_ENTER,
+      ],
+      mustChangePassword: false,
+      tokenVersion: 1,
+    };
+    const taUser = {
+      ...doctorUser,
+      name: 'TA Omar',
+      staffType: 'teaching_assistant',
+    };
+
+    const grantedSet = new Set([String(c1), String(c2)]);
+    const assignedIds = [c1, c2, c3];
+    const containsGradeGrant = (filter: object) =>
+      JSON.stringify(filter).includes('gradeEntryStaffIds');
+    const courseModel = {
+      exists: jest.fn(
+        (filter: {
+          _id?: Types.ObjectId | string;
+          gradeEntryStaffIds?: unknown;
+        }) => ({
+          lean: () => {
+            const targetId = filter._id ? String(filter._id) : '';
+            const isAssigned = assignedIds.some(
+              (id) => String(id) === targetId,
+            );
+            if (containsGradeGrant(filter)) {
+              return Promise.resolve(
+                isAssigned && grantedSet.has(targetId)
+                  ? { _id: filter._id }
+                  : null,
+              );
+            }
+            return Promise.resolve(isAssigned ? { _id: filter._id } : null);
+          },
+        }),
+      ),
+      find: jest.fn((filter: Record<string, unknown>) =>
+        chain(
+          containsGradeGrant(filter)
+            ? assignedIds
+                .filter((id) => grantedSet.has(String(id)))
+                .map((_id) => ({ _id }))
+            : assignedIds.map((_id) => ({ _id })),
+        ),
+      ),
+      findById: jest.fn(() => chain(null)),
+      findOne: jest.fn(() => chain(null)),
+    };
+    const assignmentModel = {
+      exists: jest.fn(() => chain(null)),
+      find: jest.fn(() => chain([])),
+    };
+    const service = new ControlAccessService(
+      courseModel as never,
+      assignmentModel as never,
+    );
+
+    // Doctor is automatically authorized on all 3 assigned courses even when c3 is NOT in gradeEntryStaffIds
+    await expect(service.canWriteCourseGrades(doctorUser, c3)).resolves.toBe(
+      true,
+    );
+    const doctorScope = await service.listScopedCourseIds(
+      doctorUser,
+      '2026-2027',
+      'first',
+    );
+    expect(doctorScope?.map(String)).toEqual([
+      String(c1),
+      String(c2),
+      String(c3),
+    ]);
+
+    // TA Omar sees ONLY the 2 granted courses (c1, c2); c3 is completely hidden and blocked
+    const taScope = await service.listScopedCourseIds(
+      taUser,
+      '2026-2027',
+      'first',
+    );
+    expect(taScope?.map(String)).toEqual([String(c1), String(c2)]);
+    await expect(
+      service.hasCourseScope(
+        taUser,
+        { _id: c1, code: 'CS101' } as never,
+        '2026-2027',
+        'first',
+      ),
+    ).resolves.toBe(true);
+    await expect(
+      service.hasCourseScope(
+        taUser,
+        { _id: c3, code: 'CS103' } as never,
+        '2026-2027',
+        'first',
+      ),
+    ).resolves.toBe(false);
+    await expect(service.canWriteCourseGrades(taUser, c1)).resolves.toBe(true);
+    await expect(service.canWriteCourseGrades(taUser, c3)).resolves.toBe(false);
+  });
+
   it('enforces course scope for doctors unless control.scope.all is granted', async () => {
     const userWithoutScopeAll = {
       _id: staffId,
@@ -422,6 +586,7 @@ describe('ControlSheetsService lock & unlock', () => {
     };
     const auditModel = { create: jest.fn().mockResolvedValue({}) };
     const access = {
+      canWriteCourseGrades: jest.fn().mockResolvedValue(true),
       assertPermission: jest.fn(),
       assertCourseScope: jest.fn().mockResolvedValue(undefined),
       getCapabilities: jest.fn(() => ({
@@ -550,6 +715,7 @@ describe('ControlSheetsService lock & unlock', () => {
     };
     const auditModel = { create: jest.fn().mockResolvedValue({}) };
     const access = {
+      canWriteCourseGrades: jest.fn().mockResolvedValue(true),
       assertPermission: jest.fn(),
       assertCourseScope: jest.fn().mockResolvedValue(undefined),
     };

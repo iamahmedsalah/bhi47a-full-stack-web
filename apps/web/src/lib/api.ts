@@ -244,6 +244,21 @@ api.interceptors.response.use(
     }
     const payload = error.response?.data;
     const deadline = retryAfterDeadline(error.response?.headers?.['retry-after']);
+    if (typeof Blob !== 'undefined' && payload instanceof Blob) {
+      if (payload.type.includes('application/json')) {
+        try {
+          const parsed = JSON.parse(await payload.text()) as ApiErrorPayload;
+          return Promise.reject({
+            ...parsed,
+            statusCode: parsed.statusCode ?? error.response?.status,
+            ...(deadline !== undefined ? { retryAfterAt: deadline } : {}),
+          });
+        } catch {
+          // Fall through if Blob body is not valid JSON
+        }
+      }
+      return Promise.reject(error);
+    }
     // Keep the existing error payload shape, while preserving lost HTTP metadata.
     if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
       return Promise.reject({
@@ -747,6 +762,26 @@ Object.assign(ERROR_TRANSLATIONS, {
   'اعتماد كشف الكنترول يتطلب صلاحية اعتماد الكنترول (control.sheets.approve)': {
     ar: 'اعتماد الكشف يتطلب صلاحية اعتماد كشوف الكنترول.',
     en: 'Approving the sheet requires Control sheet approval permission.',
+  },
+  'Material file is missing. Contact the administrator.': {
+    ar: 'الملف المادي غير متوفر على الخادم الحالي (قد يكون مرفوعًا على بيئة أخرى أو محذوفًا من التخزين). يرجى إعادة رفع الملف.',
+    en: 'The physical file is missing on this server (it may have been uploaded on another environment or removed from storage). Please re-upload the file.',
+  },
+  'Material file is unavailable': {
+    ar: 'الملف غير متاح حالياً للمعاينة أو التحميل. يرجى إعادة رفعه أو مراجعة مسؤول النظام.',
+    en: 'This file is currently unavailable for preview or download. Please re-upload it or contact the administrator.',
+  },
+  'Material file is unavailable for preview': {
+    ar: 'الملف غير متاح حالياً للمعاينة.',
+    en: 'Material file is currently unavailable for preview.',
+  },
+  'لم يتم رفع ملف المنهج لهذا المقرر بعد': {
+    ar: 'لم يتم رفع ملف المنهج لهذا المقرر بعد.',
+    en: 'No syllabus PDF has been uploaded for this course yet.',
+  },
+  'ملف المنهج غير متوفر حالياً': {
+    ar: 'ملف المنهج غير متوفر حالياً.',
+    en: 'The syllabus file is currently unavailable.',
   },
 });
 

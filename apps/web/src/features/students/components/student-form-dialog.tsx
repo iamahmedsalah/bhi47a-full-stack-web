@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useWatch, useForm } from 'react-hook-form';
+import { AcademicYearSelect } from '@/components/ui/academic-year-select';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
   User,
@@ -105,7 +106,7 @@ function StudentFormDialogState({
       level: '1',
       group: '',
       section: '',
-      academicYear: '2024-2025',
+      academicYear: '',
       semester: 'first',
       seatNumber: '',
       examRoom: '',
@@ -144,7 +145,7 @@ function StudentFormDialogState({
         level: defaultValues?.level ?? '1',
         group: defaultValues?.group ?? '',
         section: defaultValues?.section ?? '',
-        academicYear: defaultValues?.academicYear ?? '2024-2025',
+        academicYear: defaultValues?.academicYear ?? '',
         semester: defaultValues?.semester ?? 'first',
         seatNumber: defaultValues?.seatNumber ?? '',
         examRoom: defaultValues?.examRoom ?? '',
@@ -490,18 +491,14 @@ function StudentFormDialogState({
 
                     {/* Academic Year */}
                     <div>
-                      <label className="text-xs font-semibold mb-1.5 block text-foreground">
-                        {isAr ? 'العام الأكاديمي' : 'Academic Year'}{' '}
-                        <span className="text-primary">*</span>
-                      </label>
-                      <Input
-                        {...form.register('academicYear')}
-                        dir="ltr"
-                        placeholder="2024-2025"
-                        className="rounded-squircle text-left font-mono text-sm border-white/15 bg-background/60 focus:border-primary"
+                      <AcademicYearSelect
+                        value={watchedForm.academicYear ?? ''}
+                        onChange={(year) => form.setValue('academicYear', year, { shouldValidate: true })}
+                        invalid={Boolean(form.formState.errors.academicYear)}
+                        defaultToCurrent
                       />
                       {form.formState.errors.academicYear && (
-                        <p className="text-xs text-danger mt-1">{form.formState.errors.academicYear.message}</p>
+                        <p role="alert" className="text-xs text-danger mt-1">{form.formState.errors.academicYear.message}</p>
                       )}
                     </div>
 

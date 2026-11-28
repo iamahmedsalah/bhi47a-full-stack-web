@@ -17,7 +17,9 @@ const staff = {
 function setup(rows: Record<string, unknown>[]) {
   const courses = {
     find: jest.fn(() => ({
-      session: jest.fn(() => ({ lean: jest.fn().mockResolvedValue(rows) })),
+      select: jest.fn(() => ({
+        session: jest.fn(() => ({ lean: jest.fn().mockResolvedValue(rows) })),
+      })),
     })),
     updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
   };

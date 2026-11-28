@@ -13,6 +13,8 @@ import {
   admissionHash,
 } from '../../src/modules/admissions/admission-security.service';
 import { AdmissionWorkflowService } from '../../src/modules/admissions/admission-workflow.service';
+import { AdmissionLifecycleService } from '../../src/modules/admissions/admission-lifecycle.service';
+import { cairoToday } from '../../src/modules/admissions/admission-evidence';
 import { AdmissionSpreadsheets } from '../../src/modules/admissions/admission-spreadsheets.service';
 import { StudentCodesService } from '../../src/modules/student-codes/student-codes.service';
 import { StudentCodeMappingsService } from '../../src/modules/student-codes/student-code-mappings.service';
@@ -31,6 +33,7 @@ describe('Complete admission workflow on the isolated replica set', () => {
     allocator: StudentCodeAllocator,
     periods: AdmissionPeriodsService;
   let students: StudentsService;
+  let lifecycle: AdmissionLifecycleService;
   const extraYears = ['2093-2094', '2095-2096', '2096-2097'];
   const academicYear = '2087-2088',
     yearPrefix = '88',
@@ -79,6 +82,7 @@ describe('Complete admission workflow on the isolated replica set', () => {
     );
     await app.init();
     workflow = module.get(AdmissionWorkflowService);
+    lifecycle = module.get(AdmissionLifecycleService);
     security = module.get(AdmissionSecurity);
     sheets = module.get(AdmissionSpreadsheets);
     codes = module.get(StudentCodesService);
@@ -221,6 +225,130 @@ describe('Complete admission workflow on the isolated replica set', () => {
       submittedAt: new Date(),
     });
   }
+  it('moves ministry review through provisional enrollment, confirmation and protected archival', async () => {
+    await workflow.store.periods.updateOne(
+      { _id: periodId },
+      { $set: { lifecycleEnabled: true } },
+    );
+    try {
+      const application = await pending();
+      await workflow.requests.updateOne(
+        { _id: application._id },
+        {
+          $set: {
+            studentType: 'TRANSFER',
+            previousInstitution: 'Synthetic institution',
+          },
+        },
+      );
+      const id = String(application._id);
+      const accepted = await workflow.approve(
+        id,
+        { ...approval(), level: '2', ministryStatus: 'PENDING' },
+        actor,
+      );
+      expect(accepted).toMatchObject({
+        ministryStatus: 'PENDING',
+        officialEnrollmentStatus: 'PROVISIONAL',
+      });
+      const code = accepted.studentCode!;
+      expect(
+        await workflow.store.entries.findOne({ studentCode: code }).lean(),
+      ).toHaveProperty('protectedAt');
+      const evidence = async (reference: string) => ({
+        ...(await lifecycle.upload(
+          id,
+          {
+            buffer: Buffer.from('%PDF-1.4\n%%EOF'),
+            mimetype: 'application/pdf',
+          },
+          actor,
+        )),
+        decisionDate: cairoToday(),
+        reference,
+      });
+      const ministry = await lifecycle.transition(
+        id,
+        {
+          transition: 'APPROVE_MINISTRY',
+          confirmed: true,
+          operationId: 'synthetic-ministry-approval',
+          revision: accepted.revision,
+          ministryEvidence: await evidence('APP-01'),
+        },
+        actor,
+      );
+      expect(ministry).toMatchObject({
+        ministryStatus: 'APPROVED',
+        officialEnrollmentStatus: 'PROVISIONAL',
+        studentCode: code,
+      });
+      const enrolled = await lifecycle.transition(
+        id,
+        {
+          transition: 'CONFIRM_ENROLLMENT',
+          confirmed: true,
+          operationId: 'synthetic-enrollment-confirmation',
+          revision: ministry.revision,
+          enrollmentEffectiveDate: cairoToday(),
+        },
+        actor,
+      );
+      expect(enrolled).toMatchObject({
+        officialEnrollmentStatus: 'ENROLLED',
+        studentCode: code,
+      });
+      const rejection = {
+        transition: 'REJECT_MINISTRY' as const,
+        confirmed: true as const,
+        operationId: 'synthetic-ministry-rejection',
+        revision: enrolled.revision,
+        ministryEvidence: await evidence('REJ-01'),
+      };
+      const archived = await lifecycle.transition(id, rejection, actor);
+      expect(archived).toMatchObject({
+        ministryStatus: 'REJECTED',
+        officialEnrollmentStatus: 'CANCELLED',
+        studentCode: code,
+      });
+      expect((await lifecycle.transition(id, rejection, actor)).revision).toBe(
+        archived.revision,
+      );
+      const profile = await workflow.store.profiles
+        .findOne({ studentCode: code })
+        .lean();
+      await expect(students.activate(String(profile!._id))).rejects.toThrow();
+      const snapshot = await codes.audit({
+        academicYear,
+        yearPrefix,
+        page: 1,
+        limit: 20,
+      });
+      await expect(
+        codes.deleteStudent(
+          code,
+          {
+            academicYear,
+            yearPrefix,
+            fingerprint: snapshot.fingerprint,
+            confirmed: true,
+            reason: 'Verify permanent code protection',
+          },
+          actor._id,
+        ),
+      ).rejects.toMatchObject({ response: { code: 'CODE_PERMANENT' } });
+      expect(
+        await workflow.store.connection
+          .db!.collection('admission_settlements')
+          .countDocuments({ _id: application._id }),
+      ).toBe(1);
+    } finally {
+      await workflow.store.periods.updateOne(
+        { _id: periodId },
+        { $set: { lifecycleEnabled: false } },
+      );
+    }
+  });
   it('submits no student/code, safely retries, encrypts identity and keeps duplicate receipts private', async () => {
     const invitation = await workflow.createAccess(
       {
@@ -374,11 +502,15 @@ describe('Complete admission workflow on the isolated replica set', () => {
     const requests = await Promise.all(
       Array.from({ length: 50 }, () => pending()),
     );
-    const results = await Promise.all(
+    const approvals = await Promise.allSettled(
       requests.map((item) =>
         workflow.approve(String(item._id), approval(), actor),
       ),
     );
+    const results = approvals.map((outcome) => {
+      if (outcome.status === 'rejected') throw outcome.reason;
+      return outcome.value;
+    });
     expect(new Set(results.map((item) => item.studentCode)).size).toBe(50);
     for (const item of results) {
       expect(item.status).toBe('APPROVED');
@@ -727,6 +859,36 @@ describe('Complete admission workflow on the isolated replica set', () => {
         expect(response.body.nationalId).toBeUndefined();
         expect(response.body.nationalIdEncrypted).toBeUndefined();
       });
+    const termCatalog =
+      workflow.store.connection.collection('registration_terms');
+    const catalogYear = '2091-2092';
+    const managedTerm = await termCatalog.insertOne({
+      academicYear: catalogYear,
+      semester: 'second',
+      isCurrent: true,
+      isOpen: true,
+    });
+    try {
+      await request(app.getHttpServer())
+        .get(`${base}/academic-years`)
+        .set('Cookie', cookie)
+        .expect(200)
+        .expect((response) => {
+          expect(response.body).toMatchObject({
+            currentYear: catalogYear,
+            currentSemester: 'second',
+            managedYears: expect.arrayContaining([catalogYear]),
+            items: expect.arrayContaining([catalogYear, academicYear]),
+          });
+          expect(response.body.managedYears).not.toContain(academicYear);
+        });
+      await request(app.getHttpServer())
+        .get('/api/admin/academic-years')
+        .set('Cookie', cookie)
+        .expect(403);
+    } finally {
+      await termCatalog.deleteOne({ _id: managedTerm.insertedId });
+    }
     await request(app.getHttpServer())
       .patch(`${base}/requests/${id}`)
       .set('Cookie', cookie)

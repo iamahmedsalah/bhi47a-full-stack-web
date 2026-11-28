@@ -15,6 +15,9 @@ export function staffProfilePayload(
       ? { titlePrefix: input.titlePrefix }
       : {}),
     ...(input.courseIds !== undefined ? { courseIds: input.courseIds } : {}),
+    ...(input.gradeEntryCourseIds !== undefined
+      ? { gradeEntryCourseIds: input.gradeEntryCourseIds }
+      : {}),
     ...(input.permissions !== undefined
       ? { permissions: input.permissions }
       : {}),

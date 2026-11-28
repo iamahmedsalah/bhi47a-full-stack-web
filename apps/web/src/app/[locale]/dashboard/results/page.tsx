@@ -50,12 +50,13 @@ interface Grade {
     gradePoints: number | null;
     letterGrade: string;
   };
-  grade: number;
+  grade?: number | null;
   maxGrade: number;
   status: GradeStatus;
   academicYear: string;
   semester: string;
   isPublished: boolean;
+  historicalImport?: boolean;
   creditHours?: number;
   academicLevel: "1" | "2" | "3" | "4";
   courseNameAr?: string;
@@ -67,12 +68,12 @@ interface CourseGradesGroup {
   courseName: string;
   academicYear: string;
   semester: string;
-  creditHours: number;
+  creditHours?: number;
   academicLevel: "1" | "2" | "3" | "4";
   officialResult?: Grade["officialResult"];
-  coursework?: { grade: number; maxGrade: number; status: string };
-  midterm?: { grade: number; maxGrade: number; status: string };
-  final?: { grade: number; maxGrade: number; status: string };
+  hasPublishedHistoricalFinal?: boolean;
+  midterm?: Pick<Grade, "grade" | "maxGrade" | "status">;
+  final?: Pick<Grade, "grade" | "maxGrade" | "status">;
 }
 
 interface StudentAcademicSummary {
@@ -81,48 +82,53 @@ interface StudentAcademicSummary {
   gpa?: number;
   completedCreditHours?: number;
   completedCoursesCount?: number;
+  hasAcademicResults?: boolean;
+}
+
+const resultDash = "—";
+
+function formatRecordedMark(grade: Pick<Grade, "grade" | "maxGrade">) {
+  return typeof grade.grade === "number" && Number.isFinite(grade.grade)
+    ? `${grade.grade} / ${grade.maxGrade}`
+    : resultDash;
+}
+
+function officialCourseOutcome({ officialResult }: CourseGradesGroup) {
+  if (
+    !officialResult?.official ||
+    typeof officialResult.total !== "number" ||
+    !Number.isFinite(officialResult.total) ||
+    !Number.isFinite(officialResult.totalMax) ||
+    officialResult.totalMax <= 0
+  ) return undefined;
+  return {
+    ...officialResult,
+    total: officialResult.total,
+    percentage: (officialResult.total / officialResult.totalMax) * 100,
+  };
 }
 
 function calculateGroupStats(groups: CourseGradesGroup[]) {
   let acquired = 0;
   let maximum = 0;
   let passed = 0;
-  let weightedPoints = 0;
-  let credits = 0;
+  let finalized = 0;
 
   for (const group of groups) {
-    const midterm =
-      group.midterm?.status === "present" ? group.midterm.grade : 0;
-    const final = group.final?.status === "present" ? group.final.grade : 0;
-    const maxMidterm = group.midterm?.maxGrade ?? 0;
-    const maxFinal = group.final?.maxGrade ?? 0;
-    const maxTotal =
-      group.officialResult?.totalMax ??
-      maxMidterm + maxFinal + (group.coursework?.maxGrade ?? 0);
-    const total =
-      group.officialResult?.total ??
-      midterm + final + (group.coursework?.grade ?? 0);
-    const percentage = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
-    if (group.officialResult?.official) {
-      acquired += total;
-      maximum += maxTotal;
-    }
-    const scale = calculateGradeScale(percentage, group.final?.status);
-    if (group.officialResult?.official && group.officialResult.passed)
-      passed += 1;
-    if (group.officialResult?.official) {
-      weightedPoints +=
-        (group.officialResult?.gradePoints ?? scale.points) * group.creditHours;
-      credits += group.creditHours;
-    }
+    const outcome = officialCourseOutcome(group);
+    if (!outcome) continue;
+    acquired += outcome.total;
+    maximum += outcome.totalMax;
+    finalized += 1;
+    if (outcome.passed) passed += 1;
   }
 
   return {
     acquired,
     maximum,
     passed,
-    percentage: maximum > 0 ? Math.round((acquired / maximum) * 100) : 0,
-    gpa: credits > 0 ? Math.round((weightedPoints / credits) * 100) / 100 : 0,
+    finalized,
+    percentage: maximum > 0 ? Math.round((acquired / maximum) * 100) : null,
   };
 }
 
@@ -293,11 +299,11 @@ export default function StudentResultsPage() {
       : statusQuery.data;
   const grades = statusData?.isOpen
     ? (resultsQuery.data ?? []).filter(
-        (grade) => grade.examType === "midterm" || grade.examType === "final",
+        (grade) => grade.examType === 'midterm' || grade.examType === 'final' || (statusData.provisional && grade.examType === 'coursework'),
       )
     : [];
 
-  if (grades.length === 0) {
+  if (!statusData?.isOpen) {
     let emptyTitle = isEnglish ? "No published results" : "النتائج لم تعلن بعد";
     let emptyDesc = isEnglish
       ? "Your semester results have not been published by the administration yet."
@@ -380,7 +386,7 @@ export default function StudentResultsPage() {
           (isEnglish ? g.courseNameEn : g.courseNameAr) || g.courseName,
         academicYear: g.academicYear,
         semester: g.semester,
-        creditHours: g.creditHours ?? 1,
+        creditHours: g.creditHours,
         academicLevel: g.academicLevel,
       };
     }
@@ -390,14 +396,13 @@ export default function StudentResultsPage() {
         maxGrade: g.maxGrade,
         status: g.status,
       };
-    } else if (g.examType === "coursework") {
-      groups[groupKey].coursework = {
-        grade: g.grade,
-        maxGrade: g.maxGrade,
-        status: g.status,
-      };
     } else if (g.examType === "final") {
       groups[groupKey].officialResult = g.officialResult;
+      groups[groupKey].hasPublishedHistoricalFinal =
+        g.historicalImport === true &&
+        g.isPublished &&
+        typeof g.grade === "number" &&
+        Number.isFinite(g.grade);
       groups[groupKey].final = {
         grade: g.grade,
         maxGrade: g.maxGrade,
@@ -413,17 +418,27 @@ export default function StudentResultsPage() {
   const totalMax = cumulativeStats.maximum;
   const passedCourses = cumulativeStats.passed;
   const cumulativePercentage = cumulativeStats.percentage;
-  const officialGpa =
-    typeof profileQuery.data?.gpa === "number" ? profileQuery.data.gpa : 0;
-  const officialGpaScale = getGpaScale(officialGpa);
-  const officialCompletedCredits =
-    typeof profileQuery.data?.completedCreditHours === "number"
-      ? profileQuery.data.completedCreditHours
-      : passedCourses * 3;
+  const academic = profileQuery.data;
+  const hasAcademicResults = academic?.hasAcademicResults ??
+    ((academic?.gpa ?? 0) > 0 ||
+      (academic?.completedCreditHours ?? 0) > 0 ||
+      (academic?.completedCoursesCount ?? 0) > 0);
+  const showAcademicValues =
+    hasAcademicResults &&
+    !statusData.provisional &&
+    (cumulativeStats.finalized > 0 ||
+      groupedList.some((course) => course.hasPublishedHistoricalFinal));
+  const officialGpa = showAcademicValues ? academic?.gpa ?? null : null;
+  const officialGpaScale = officialGpa === null ? undefined : getGpaScale(officialGpa);
+  const officialCompletedCredits = showAcademicValues ? academic?.completedCreditHours ?? null : null;
   const selectedLevelGroups = groupedList.filter(
     (group) => group.academicLevel === selectedLevel,
   );
   const selectedLevelStats = calculateGroupStats(selectedLevelGroups);
+  const hasLevelOutcomes = selectedLevelStats.finalized > 0;
+  const showLevelAcademicValues =
+    hasLevelOutcomes ||
+    selectedLevelGroups.some((course) => course.hasPublishedHistoricalFinal);
   // Keep the selected columns even when that component has no published release
   // yet. Existing rows also cover authorized course/student visibility overrides.
   const showMidterm =
@@ -466,18 +481,9 @@ export default function StudentResultsPage() {
     return "الفصل الدراسي الصيفي";
   };
 
-  const semesterValue = groupedList[0]?.semester ?? "";
-  const semesterLabel = isEnglish
-    ? semesterValue === "first"
-      ? "First Semester"
-      : semesterValue === "second"
-        ? "Second Semester"
-        : "Summer Semester"
-    : semesterValue === "first"
-      ? "الفصل الدراسي الأول"
-      : semesterValue === "second"
-        ? "الفصل الدراسي الثاني"
-        : "الفصل الدراسي الصيفي";
+  const semesterLabel = groupedList[0]
+    ? semesterName(groupedList[0].semester)
+    : resultDash;
 
   const certificateData: ResultCertificateData = {
     locale,
@@ -489,11 +495,12 @@ export default function StudentResultsPage() {
     totalMax,
     percentage: cumulativePercentage,
     gpa: officialGpa,
-    overallGradeLetter: officialGpaScale.letter,
+    overallGradeLetter: officialGpaScale?.letter,
     overallGradeName: isEnglish
-      ? officialGpaScale.nameEn
-      : officialGpaScale.nameAr,
+      ? officialGpaScale?.nameEn
+      : officialGpaScale?.nameAr,
     passedCourses,
+    finalizedCourses: cumulativeStats.finalized,
     issuedAt: new Intl.DateTimeFormat(locale === "ar" ? "ar-EG" : "en-GB", {
       dateStyle: "long",
     }).format(new Date()),
@@ -507,31 +514,16 @@ export default function StudentResultsPage() {
       total: true,
     },
     courses: groupedList.map((course) => {
-      const midtermGrade =
-        course.midterm?.status === "present" ? course.midterm.grade : 0;
-      const finalGrade =
-        course.final?.status === "present" ? course.final.grade : 0;
-      const maxMidterm = course.midterm?.maxGrade ?? 0;
-      const maxFinal = course.final?.maxGrade ?? 0;
-      const total =
-        course.officialResult?.total ??
-        midtermGrade + finalGrade + (course.coursework?.grade ?? 0);
-      const maxTotal =
-        course.officialResult?.totalMax ??
-        maxMidterm + maxFinal + (course.coursework?.maxGrade ?? 0);
+      const outcome = officialCourseOutcome(course);
       const isBanned =
         (course.final?.status ?? course.midterm?.status) === "banned";
       const isAbsent =
         (course.final?.status ?? course.midterm?.status) === "absent";
-      const isPassed =
-        course.officialResult?.passed ??
-        (total >= maxTotal / 2 && course.final?.status === "present");
-      const coursePct = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
       const courseScale = calculateGradeScale(
-        coursePct,
+        outcome?.percentage ?? 0,
         course.final?.status === "banned"
           ? "banned"
-          : course.officialResult?.official && !course.officialResult.passed
+          : outcome && !outcome.passed
             ? "absent"
             : (course.final?.status ?? course.midterm?.status),
       );
@@ -539,10 +531,9 @@ export default function StudentResultsPage() {
         course.final?.status === "incomplete" ||
         course.final?.status === "excused"
           ? tControl(`states.${course.final.status}`)
-          : !course.final && !isAbsent && !isBanned
+          : !course.final && course.midterm && !isAbsent && !isBanned
             ? tControl("midterm")
-            : course.final?.status === "present" &&
-                !course.officialResult?.official
+            : !outcome && !isAbsent && !isBanned
               ? tRelease("pendingResult")
               : isBanned
                 ? isEnglish
@@ -552,7 +543,7 @@ export default function StudentResultsPage() {
                   ? isEnglish
                     ? "Absent"
                     : "غائب"
-                  : isPassed
+                  : outcome?.passed
                     ? isEnglish
                       ? "Pass"
                       : "ناجح"
@@ -565,35 +556,39 @@ export default function StudentResultsPage() {
         name: course.courseName,
         midterm:
           course.midterm?.status === "present"
-            ? `${course.midterm.grade} / ${course.midterm.maxGrade}`
+            ? formatRecordedMark(course.midterm)
             : course.midterm
               ? tControl(`states.${course.midterm.status}`)
               : "—",
         final:
           course.final?.status === "present"
-            ? `${course.final.grade} / ${course.final.maxGrade}`
+            ? formatRecordedMark(course.final)
             : course.final
               ? tControl(`states.${course.final.status}`)
               : "—",
 
-        total: course.officialResult?.official ? `${total} / ${maxTotal}` : "-",
+        total: outcome ? `${outcome.total} / ${outcome.totalMax}` : resultDash,
         status,
-        creditHours: course.creditHours,
+        creditHours:
+          outcome || course.hasPublishedHistoricalFinal
+            ? course.creditHours
+            : undefined,
         letterGrade:
-          course.officialResult?.official ||
+          outcome ||
           course.final?.status === "incomplete" ||
           course.final?.status === "banned"
             ? course.final?.status === "incomplete"
               ? "IC"
               : course.final?.status === "banned"
                 ? "FX"
-                : (course.officialResult?.letterGrade ?? courseScale.letter)
+                : (outcome?.letterGrade ?? courseScale.letter)
             : undefined,
       };
     }),
   };
 
   const handlePrint = () => {
+    if (statusQuery.data?.provisional) return;
     if (!openResultCertificate(certificateData)) {
       toast.error(
         isEnglish
@@ -604,6 +599,7 @@ export default function StudentResultsPage() {
   };
 
   const handleDownload = async () => {
+    if (statusQuery.data?.provisional) return;
     setIsDownloading(true);
     try {
       const downloaded = await downloadResultCertificatePdf(certificateData);
@@ -646,7 +642,7 @@ export default function StudentResultsPage() {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        {grades.length > 0 && !statusData.provisional && <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={handlePrint}
             className="flex items-center gap-2 rounded-xl border border-border bg-card hover:bg-secondary px-4 py-2.5 text-xs font-semibold text-foreground transition-all cursor-pointer"
@@ -670,8 +666,9 @@ export default function StudentResultsPage() {
                   : "تنزيل PDF"}
             </span>
           </button>
-        </div>
+        </div>}
       </div>
+      {statusQuery.data?.provisional && <p role="status" className="rounded-xl border border-warning/30 p-3 text-sm">{isEnglish ? 'Any marks shown are provisional. An official certificate is available after enrollment is confirmed.' : 'الدرجات المعروضة استرشادية. الشهادة الرسمية متاحة بعد تأكيد القيد.'}</p>}
 
       {showFinal && !selectedLevelGroups.some((course) => course.final) && (
         <p
@@ -684,11 +681,15 @@ export default function StudentResultsPage() {
             : "عمود النهائي متاح. تظهر درجاته بعد نشر الإدارة لنسخة نهائي معتمدة. يشمل المجموع الرسمي أعمال السنة، مع بقاء عمودها مخفيًا."}
         </p>
       )}
-      {selectedLevelGroups.some(
-        (course) => course.officialResult?.official,
-      ) && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3.5 print:grid-cols-5">
-          {/* Total Cumulative Letter Grade Card */}
+      <div
+        className={
+          hasLevelOutcomes
+            ? "grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3.5 print:grid-cols-5"
+            : "grid grid-cols-2 gap-3.5"
+        }
+      >
+        {/* Total Cumulative Letter Grade Card */}
+        {hasLevelOutcomes && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -703,106 +704,113 @@ export default function StudentResultsPage() {
               </div>
               <div className="flex items-baseline gap-1.5">
                 <span className="text-2xl font-black font-mono text-primary">
-                  {officialGpaScale.letter}
+                  {officialGpaScale?.letter ?? resultDash}
                 </span>
-                <span className="text-xs font-bold text-muted-foreground">
-                  (
-                  {isEnglish
-                    ? officialGpaScale.nameEn
-                    : officialGpaScale.nameAr}
-                  )
-                </span>
+                {officialGpaScale && (
+                  <span className="text-xs font-bold text-muted-foreground">
+                    (
+                    {isEnglish
+                      ? officialGpaScale.nameEn
+                      : officialGpaScale.nameAr}
+                    )
+                  </span>
+                )}
               </div>
             </Card>
           </motion.div>
+        )}
 
-          {/* Cumulative GPA */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2, delay: 0.03 }}
-          >
-            <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
-              <div className="flex justify-between items-start">
-                <span className="text-[10px] font-black uppercase text-muted-foreground">
-                  {isEnglish ? "Cumulative GPA" : "المعدل التراكمي"}
-                </span>
-                <GraduationCap className="h-4.5 w-4.5 text-violet-400" />
-              </div>
-              <span className="text-2xl font-black font-mono text-foreground">
-                <bdi
-                  dir="ltr"
-                  className="whitespace-nowrap text-xl sm:text-2xl"
-                >
-                  {officialGpa.toFixed(2)} / 4.00
-                </bdi>
+        {/* Cumulative GPA */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2, delay: 0.03 }}
+        >
+          <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
+            <div className="flex justify-between items-start">
+              <span className="text-[10px] font-black uppercase text-muted-foreground">
+                {isEnglish ? "Cumulative GPA" : "المعدل التراكمي"}
               </span>
-            </Card>
-          </motion.div>
+              <GraduationCap className="h-4.5 w-4.5 text-violet-400" />
+            </div>
+            <span className="text-2xl font-black font-mono text-foreground">
+              <bdi dir="ltr" className="whitespace-nowrap text-xl sm:text-2xl">
+                  {showLevelAcademicValues && officialGpa !== null
+                  ? `${officialGpa.toFixed(2)} / 4.00`
+                  : resultDash}
+              </bdi>
+            </span>
+          </Card>
+        </motion.div>
 
-          {/* Completed Credit Hours */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2, delay: 0.05 }}
-          >
-            <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
-              <div className="flex justify-between items-start">
-                <span className="text-[10px] font-black uppercase text-muted-foreground">
-                  {isEnglish ? "Completed Credits" : "الساعات المكتملة"}
+        {/* Completed Credit Hours */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2, delay: 0.05 }}
+        >
+          <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
+            <div className="flex justify-between items-start">
+              <span className="text-[10px] font-black uppercase text-muted-foreground">
+                {isEnglish ? "Completed Credits" : "الساعات المكتملة"}
+              </span>
+              <CheckSquare className="h-4.5 w-4.5 text-teal-400" />
+            </div>
+            <div className="flex items-baseline gap-1">
+              <span className="text-2xl font-black font-mono text-foreground">
+                  {showLevelAcademicValues
+                  ? (officialCompletedCredits ?? resultDash)
+                  : resultDash}
+              </span>
+              <span className="text-xs font-bold text-muted-foreground">
+                {isEnglish ? "credits" : "ساعة"}
+              </span>
+            </div>
+          </Card>
+        </motion.div>
+
+        {hasLevelOutcomes && (
+          <>
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <Card className="p-4 bg-card/45 border-border/70 flex flex-col justify-between h-28">
+                <div className="flex justify-between items-start">
+                  <span className="text-[10px] font-black text-muted-foreground">
+                    {isEnglish ? "Academic warnings" : "عدد الإنذارات الأكاديمية"}
+                  </span>
+                  <AlertTriangle className="h-4.5 w-4.5 text-amber-400" />
+                </div>
+                <span className="text-2xl font-black font-mono">
+                  {profileQuery.data?.academicWarnings ?? 0}
                 </span>
-                <CheckSquare className="h-4.5 w-4.5 text-teal-400" />
-              </div>
-              <div className="flex items-baseline gap-1">
+              </Card>
+            </motion.div>
+
+            {/* Passed courses */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2, delay: 0.11 }}
+            >
+              <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
+                <div className="flex justify-between items-start">
+                  <span className="text-[10px] font-black uppercase text-muted-foreground">
+                    {isEnglish ? "Passed Courses" : "المواد الناجح بها"}
+                  </span>
+                  <Award className="h-4.5 w-4.5 text-primary" />
+                </div>
                 <span className="text-2xl font-black font-mono text-foreground">
-                  {officialCompletedCredits}
+                  <bdi dir="ltr">
+                    {selectedLevelStats.passed} / {selectedLevelStats.finalized}
+                  </bdi>
                 </span>
-                <span className="text-xs font-bold text-muted-foreground">
-                  {isEnglish ? "credits" : "ساعة"}
-                </span>
-              </div>
-            </Card>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <Card className="p-4 bg-card/45 border-border/70 flex flex-col justify-between h-28">
-              <div className="flex justify-between items-start">
-                <span className="text-[10px] font-black text-muted-foreground">
-                  {isEnglish ? "Academic warnings" : "عدد الإنذارات الأكاديمية"}
-                </span>
-                <AlertTriangle className="h-4.5 w-4.5 text-amber-400" />
-              </div>
-              <span className="text-2xl font-black font-mono">
-                {profileQuery.data?.academicWarnings ?? 0}
-              </span>
-            </Card>
-          </motion.div>
-
-          {/* Passed courses */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2, delay: 0.11 }}
-          >
-            <Card className="p-4 bg-card/45 backdrop-blur-sm border-border/70 flex flex-col justify-between h-28 relative overflow-hidden shadow-[var(--shadow-glow)] hover:border-primary/30 transition-all duration-300">
-              <div className="flex justify-between items-start">
-                <span className="text-[10px] font-black uppercase text-muted-foreground">
-                  {isEnglish ? "Passed Courses" : "المواد الناجح بها"}
-                </span>
-                <Award className="h-4.5 w-4.5 text-primary" />
-              </div>
-              <span className="text-2xl font-black font-mono text-foreground">
-                <bdi dir="ltr">
-                  {selectedLevelStats.passed} / {selectedLevelGroups.length}
-                </bdi>
-              </span>
-            </Card>
-          </motion.div>
-        </div>
-      )}
+              </Card>
+            </motion.div>
+          </>
+        )}
+      </div>
       <Tabs
         value={selectedLevel}
         onValueChange={setSelectedLevel}
@@ -931,36 +939,17 @@ export default function StudentResultsPage() {
                           </div>
                           <div className="flex items-center gap-3 font-mono text-xs font-bold">
                             <span className="text-muted-foreground text-[11px]">
-                              {section.stats.passed}/{section.groups.length}{" "}
-                              {isEnglish ? "passed" : "ناجح"}
+                              {section.stats.finalized > 0
+                                ? `${section.stats.passed}/${section.stats.finalized} ${isEnglish ? "passed" : "ناجح"}`
+                                : resultDash}
                             </span>
                           </div>
                         </div>
                       </td>
                     </tr>
                     {section.groups.map((course) => {
-                      const midVal =
-                        course.midterm?.status === "present"
-                          ? course.midterm.grade
-                          : 0;
-                      const finalVal =
-                        course.final?.status === "present"
-                          ? course.final.grade
-                          : 0;
-                      const total =
-                        course.officialResult?.total ??
-                        midVal + finalVal + (course.coursework?.grade ?? 0);
-
-                      const maxMid = course.midterm?.maxGrade ?? 0;
-                      const maxFin = course.final?.maxGrade ?? 0;
-                      const maxTotal =
-                        course.officialResult?.totalMax ??
-                        maxMid + maxFin + (course.coursework?.maxGrade ?? 0);
-
-                      const isPass =
-                        course.officialResult?.passed ??
-                        (total >= maxTotal / 2 &&
-                          course.final?.status === "present");
+                      const outcome = officialCourseOutcome(course);
+                      const isPass = outcome?.passed;
                       const isAbsent =
                         (course.final?.status ?? course.midterm?.status) ===
                         "absent";
@@ -972,7 +961,7 @@ export default function StudentResultsPage() {
                       let statusBadgeClass =
                         "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30";
 
-                      if (!course.final && !isAbsent && !isBanned) {
+                      if (!course.final && course.midterm && !isAbsent && !isBanned) {
                         statusText = isEnglish
                           ? "Midterm result"
                           : "نتيجة الميدترم";
@@ -993,7 +982,7 @@ export default function StudentResultsPage() {
                         statusText = tControl(`states.${course.final.status}`);
                         statusBadgeClass =
                           "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30";
-                      } else if (!course.officialResult?.official) {
+                      } else if (!outcome) {
                         statusText = tRelease("pendingResult");
                         statusBadgeClass =
                           "bg-muted text-muted-foreground border-border";
@@ -1007,14 +996,11 @@ export default function StudentResultsPage() {
                           "bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30";
                       }
 
-                      const percentage =
-                        maxTotal > 0 ? (total / maxTotal) * 100 : 0;
                       const scale = calculateGradeScale(
-                        percentage,
+                        outcome?.percentage ?? 0,
                         course.final?.status === "banned"
                           ? "banned"
-                          : course.officialResult?.official &&
-                              !course.officialResult.passed
+                          : outcome && !outcome.passed
                             ? "absent"
                             : (course.final?.status ?? course.midterm?.status),
                       );
@@ -1054,12 +1040,12 @@ export default function StudentResultsPage() {
                               <bdi className="text-[11px] font-mono text-muted-foreground font-semibold px-1.5 py-0.5 rounded bg-muted/60 border border-border/50">
                                 {course.courseCode}
                               </bdi>
-                              {course.creditHours ? (
-                                <span className="text-[10px] text-muted-foreground">
-                                  {course.creditHours}{" "}
-                                  {isEnglish ? "hrs" : "ساعات"}
-                                </span>
-                              ) : null}
+                              <span className="text-[10px] text-muted-foreground">
+                                {outcome || course.hasPublishedHistoricalFinal
+                                  ? course.creditHours ?? resultDash
+                                  : resultDash}{" "}
+                                {isEnglish ? "hrs" : "ساعات"}
+                              </span>
                             </div>
                           </td>
                           {showMidterm && (
@@ -1067,10 +1053,7 @@ export default function StudentResultsPage() {
                               {course.midterm ? (
                                 course.midterm.status === "present" ? (
                                   <span className="inline-flex items-center justify-center font-mono font-bold text-xs text-foreground px-2.5 py-1 rounded-squircle bg-muted/50 border border-border/60">
-                                    <bdi>
-                                      {course.midterm.grade} /{" "}
-                                      {course.midterm.maxGrade}
-                                    </bdi>
+                                    <bdi>{formatRecordedMark(course.midterm)}</bdi>
                                   </span>
                                 ) : (
                                   <span className="inline-flex items-center px-2 py-0.5 rounded-squircle text-[10px] font-bold bg-rose-500/10 text-rose-600 border border-rose-500/20">
@@ -1092,10 +1075,7 @@ export default function StudentResultsPage() {
                               {course.final ? (
                                 course.final.status === "present" ? (
                                   <span className="inline-flex items-center justify-center font-mono font-bold text-xs text-foreground px-2.5 py-1 rounded-squircle bg-muted/50 border border-border/60">
-                                    <bdi>
-                                      {course.final.grade} /{" "}
-                                      {course.final.maxGrade}
-                                    </bdi>
+                                    <bdi>{formatRecordedMark(course.final)}</bdi>
                                   </span>
                                 ) : (
                                   <span className="inline-flex items-center px-2 py-0.5 rounded-squircle text-[10px] font-bold bg-rose-500/10 text-rose-600 border border-rose-500/20">
@@ -1111,13 +1091,11 @@ export default function StudentResultsPage() {
                           )}
                           {showTotal && (
                             <td className="p-4 text-center">
-                              {course.officialResult?.official ? (
+                              {outcome ? (
                                 <div className="inline-flex flex-col items-center gap-1">
                                   <span className="font-mono font-black text-sm text-foreground">
                                     <bdi>
-                                      {course.officialResult?.official
-                                        ? `${percentage.toFixed(1)}%`
-                                        : "-"}
+                                      {`${outcome.percentage.toFixed(1)}%`}
                                     </bdi>
                                   </span>
                                   <div className="w-16 bg-muted rounded-full h-1.5 overflow-hidden">
@@ -1126,7 +1104,7 @@ export default function StudentResultsPage() {
                                         isPass ? "bg-emerald-500" : "bg-red-500"
                                       }`}
                                       style={{
-                                        width: `${Math.min(100, Math.max(0, percentage))}%`,
+                                        width: `${Math.min(100, Math.max(0, outcome.percentage))}%`,
                                       }}
                                     />
                                   </div>
@@ -1138,7 +1116,7 @@ export default function StudentResultsPage() {
                           )}
                           <td className="p-4 text-end">
                             <div className="flex items-center justify-end gap-2">
-                              {(course.officialResult?.official ||
+                              {(outcome ||
                                 course.final?.status === "incomplete" ||
                                 course.final?.status === "banned") && (
                                 <span
@@ -1148,7 +1126,7 @@ export default function StudentResultsPage() {
                                     ? "IC"
                                     : course.final?.status === "banned"
                                       ? "FX"
-                                      : (course.officialResult?.letterGrade ??
+                                      : (outcome?.letterGrade ??
                                         scale.letter)}
                                 </span>
                               )}

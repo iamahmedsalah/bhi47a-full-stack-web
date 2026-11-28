@@ -5,7 +5,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Eye, Loader2, Send } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { AcademicYearSelect } from "@/components/ui/academic-year-select";
+import { HelpNote } from "@/components/ui/help-note";
 import {
   Dialog,
   DialogContent,
@@ -156,40 +157,35 @@ export function HistoricalPublicationModal({
             )}
           </DialogDescription>
         </DialogHeader>
-        <ol className="grid gap-2 rounded-xl border p-3 text-sm leading-6">
+        <HelpNote title={tr("خطوات النشر التاريخي", "Historical publication steps")}>
+        <ol className="grid list-decimal gap-1 ps-4">
           <li>
             {tr(
-              "1. ارفع درجات أعمال السنة والميدترم والنهائي وراجع تقرير الاستيراد.",
-              "1. Upload coursework, midterm and final grades and review the import report.",
+              "ارفع درجات أعمال السنة والميدترم والنهائي وراجع تقرير الاستيراد.",
+              "Upload coursework, midterm and final grades and review the import report.",
             )}
           </li>
           <li>
             {tr(
-              "2. عاين نطاق النشر أدناه؛ أي مكوّن ناقص أو كشف كنترول يمنع النشر.",
-              "2. Preview the scope below; missing components or existing Control sheets block publication.",
+              "عاين نطاق النشر أدناه؛ أي مكوّن ناقص أو كشف كنترول يمنع النشر.",
+              "Preview the scope below. Missing components or existing Control sheets block publication.",
             )}
           </li>
           <li>
             {tr(
-              "3. أكّد النشر وانتظر اكتمال حساب المعدل. ظهور النتائج يخضع لإعدادات الإتاحة والجدولة وحجب الطالب.",
-              "3. Confirm publication and wait for GPA calculation. Student visibility still follows visibility settings, schedules and holds.",
+              "أكّد النشر وانتظر اكتمال حساب المعدل. ظهور النتائج يخضع لإعدادات الإتاحة والجدولة وحجب الطالب.",
+              "Confirm publication and wait for GPA calculation. Student visibility still follows visibility settings, schedules and holds.",
             )}
           </li>
         </ol>
+        </HelpNote>
         <div className="grid gap-3 sm:grid-cols-3">
-          <label className="space-y-2 text-sm">
-            <span>
-              {tr("السنة الدراسية السابقة", "Previous academic year")}
-            </span>
-            <Input
-              dir="ltr"
-              className="text-left"
-              value={scope.academicYear}
-              disabled={busy}
-              onChange={(e) => changeScope({ academicYear: e.target.value })}
-              placeholder="2025-2026"
-            />
-          </label>
+          <AcademicYearSelect
+            label={tr("السنة الدراسية السابقة", "Previous academic year")}
+            value={scope.academicYear}
+            disabled={busy}
+            onChange={(year) => changeScope({ academicYear: year })}
+          />
           <div className="space-y-2 text-sm">
             <label htmlFor="historical-semester">
               {tr("الفصل الدراسي", "Semester")}

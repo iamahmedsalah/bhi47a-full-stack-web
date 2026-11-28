@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { useWatch, useForm } from "react-hook-form";
+import { AcademicYearChoice } from "./academic-year-choice";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useLocale, useTranslations } from "next-intl";
 import {
@@ -62,6 +63,7 @@ export function AdmissionPeriodForm({
       opensAt: toCairoDateTimeLocal(initial?.opensAt),
       closesAt: toCairoDateTimeLocal(initial?.closesAt),
       isEnabled: initial?.isEnabled ?? false,
+      lifecycleEnabled: initial?.lifecycleEnabled ?? false,
     },
   });
   const watchedForm = useWatch({ control: form.control });
@@ -125,24 +127,29 @@ export function AdmissionPeriodForm({
                     name={key}
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>{t(`fields.${key}`)}</FormLabel>
-                        <FormControl>
-                          <Input
-                            {...field}
-                            className="rounded-squircle"
-                            dir={key === "nameAr" ? "rtl" : "ltr"}
-                            disabled={
-                              pending ||
-                              Boolean(
-                                initial &&
-                                (key === "code" || key === "academicYear"),
-                              )
-                            }
-                            placeholder={
-                              key === "academicYear" ? "2026-2027" : undefined
-                            }
+                        {key === "academicYear" ? (
+                          <AcademicYearChoice
+                            label={t("fields.academicYear")}
+                            value={field.value}
+                            onChange={field.onChange}
+                            disabled={pending || Boolean(initial)}
+                            invalid={Boolean(form.formState.errors.academicYear)}
+                            managedOnly
+                            defaultToCurrent
                           />
-                        </FormControl>
+                        ) : (
+                          <>
+                            <FormLabel>{t(`fields.${key}`)}</FormLabel>
+                            <FormControl>
+                              <Input
+                                {...field}
+                                className="rounded-squircle"
+                                dir={key === "nameAr" ? "rtl" : "ltr"}
+                                disabled={pending || Boolean(initial && key === "code")}
+                              />
+                            </FormControl>
+                          </>
+                        )}
                         <FormMessage />
                       </FormItem>
                     )}
@@ -206,6 +213,12 @@ export function AdmissionPeriodForm({
                 </FormItem>
               )}
             />
+            <FormField control={form.control} name="lifecycleEnabled" render={({ field }) => (
+              <FormItem className="flex items-center gap-2">
+                <FormControl><Checkbox checked={field.value === true} onCheckedChange={(value) => field.onChange(value === true)} disabled={pending} /></FormControl>
+                <FormLabel>{t('fields.lifecycleEnabled')}</FormLabel>
+              </FormItem>
+            )} />
             <DialogFooter className="gap-2 rtl:sm:justify-start">
               <Button
                 type="button"

@@ -17,9 +17,6 @@ import {
   Layers,
   Loader2,
   Trash2,
-  HelpCircle,
-  ChevronDown,
-  ChevronUp,
   ShieldAlert,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -27,6 +24,8 @@ import { toast } from 'sonner';
 import { useAuth } from '@/providers/auth-provider';
 
 import { Button } from '@/components/ui/button';
+import { HelpNote } from '@/components/ui/help-note';
+import { academicYearOptionsKey } from '@/components/ui/academic-year-select';
 import { DataTableShell, type ColumnDef } from '@/components/ui/data-table-shell';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { TableCell } from '@/components/ui/table';
@@ -134,7 +133,6 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
   const [makeNewCurrent, setMakeNewCurrent] = useState(false);
   const [pendingTermId, setPendingTermId] = useState<string | null>(null);
   const [yearToDelete, setYearToDelete] = useState<string | null>(null);
-  const [guideOpen, setGuideOpen] = useState(false);
 
   // Registration Window Schedule Dialog State
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
@@ -172,6 +170,12 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
     return { totalYears, currentYearGroup, totalSemesters, openSemesters };
   }, [academicYears, flatTerms]);
 
+  const refreshTerms = () => {
+    void queryClient.invalidateQueries({ queryKey: ['admin-academic-years'] });
+    void queryClient.invalidateQueries({ queryKey: ['admin-registration-terms'] });
+    void queryClient.invalidateQueries({ queryKey: academicYearOptionsKey });
+  };
+
   // Mutations
   const toggleTermMutation = useMutation({
     mutationFn: async ({ id, isOpen }: { id: string; isOpen: boolean }) => {
@@ -180,8 +184,7 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
     },
     onSuccess: () => {
       toast.success(isAr ? 'تم تحديث حالة فترة التسجيل بنجاح' : 'Registration term status updated');
-      void queryClient.invalidateQueries({ queryKey: ['admin-academic-years'] });
-      void queryClient.invalidateQueries({ queryKey: ['admin-registration-terms'] });
+      refreshTerms();
     },
     onError: (err: unknown) => {
       const msg = getApiErrorMessage(err, isAr ? 'فشل تعديل حالة الفصل' : 'Failed to update term status');
@@ -199,8 +202,7 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
     },
     onSuccess: () => {
       toast.success(isAr ? 'تم حفظ مواعيد فترة التسجيل بنجاح' : 'Registration schedule window updated');
-      void queryClient.invalidateQueries({ queryKey: ['admin-academic-years'] });
-      void queryClient.invalidateQueries({ queryKey: ['admin-registration-terms'] });
+      refreshTerms();
       setScheduleDialogOpen(false);
       setSelectedTermForSchedule(null);
     },
@@ -225,8 +227,7 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
       toast.success(
         isAr ? `تم تعيين ${year} كسنة أكاديمية رسمية حالية` : `Set ${year} as current academic year`,
       );
-      void queryClient.invalidateQueries({ queryKey: ['admin-academic-years'] });
-      void queryClient.invalidateQueries({ queryKey: ['admin-registration-terms'] });
+      refreshTerms();
     },
     onError: (err: unknown) => {
       const msg = getApiErrorMessage(err, isAr ? 'فشل تغيير السنة الأكاديمية الحالية' : 'Failed to set current academic year');
@@ -241,8 +242,7 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
     onSuccess: (_, year) => {
       toast.success(isAr ? `تم حذف السنة الأكاديمية ${year}` : `Deleted academic year ${year}`);
       setYearToDelete(null);
-      void queryClient.invalidateQueries({ queryKey: ['admin-academic-years'] });
-      void queryClient.invalidateQueries({ queryKey: ['admin-registration-terms'] });
+      refreshTerms();
     },
     onError: (err: unknown) => {
       const msg = getApiErrorMessage(err, isAr ? 'فشل حذف السنة الأكاديمية' : 'Failed to delete academic year');
@@ -259,8 +259,7 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
       setCreateDialogOpen(false);
       setNewAcademicYear('');
       setMakeNewCurrent(false);
-      void queryClient.invalidateQueries({ queryKey: ['admin-academic-years'] });
-      void queryClient.invalidateQueries({ queryKey: ['admin-registration-terms'] });
+      refreshTerms();
     },
     onError: (err: unknown) => {
       const msg = getApiErrorMessage(err, isAr ? 'فشل إنشاء السنة الأكاديمية' : 'Failed to create academic year');
@@ -421,18 +420,6 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
 
           <div className="grid shrink-0 gap-2 md:max-w-64">
             <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setGuideOpen((prev) => !prev)}
-              className="h-auto min-h-11 whitespace-normal rounded-squircle px-3 py-2.5 gap-1.5 text-xs border-primary/30 text-primary hover:bg-primary/10"
-            >
-              <HelpCircle className="h-3.5 w-3.5" />
-              <span>{isAr ? 'دليل قفل وإدارة الفصول' : 'Term Locking Guide'}</span>
-              {guideOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-            </Button>
-
-            <Button
               disabled={!canManage}
               onClick={() => {
                 const latestYear = academicYears[0]?.academicYear;
@@ -440,7 +427,7 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
                   const endYear = parseInt(latestYear.split('-')[1], 10);
                   setNewAcademicYear(`${endYear}-${endYear + 1}`);
                 } else {
-                  setNewAcademicYear('2028-2029');
+                  setNewAcademicYear('');
                 }
                 setCreateDialogOpen(true);
               }}
@@ -453,9 +440,7 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
           </div>
         </div>
 
-        {/* Collapsible Rich Educational Guide */}
-        {guideOpen && (
-          <div className="mt-5 border-t border-white/10 pt-4 animate-in fade-in-0 duration-300">
+        <HelpNote className="mt-4" title={isAr ? 'دليل قفل وإدارة الفصول' : 'Term Locking Guide'}>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <div className="rounded-xl border border-white/10 bg-background/50 p-3.5 space-y-1.5">
                 <div className="flex items-center gap-2 text-xs font-bold text-success">
@@ -493,8 +478,7 @@ export function RegistrationTermsPanel({ locale }: { locale: string }) {
                 </p>
               </div>
             </div>
-          </div>
-        )}
+        </HelpNote>
       </div>
 
       {/* Top Metrics Row */}
