@@ -695,7 +695,24 @@ describe('performance remediation: real JWT, isolated MongoDB, HTTP concurrency'
             samples.push(sample);
             expect(errors).toBe(0);
             expect(observed).toHaveLength(240);
-            expect(sample.dbOperationsPerRequest).toBe(mode ? 6 : 7);
+
+            const observedRoute = (route: string) => {
+              const requests = observed.filter(
+                (item) => item.route === `/api/students/me/${route}`,
+              );
+              return {
+                requests: requests.length,
+                queryCounts: [...new Set(requests.map((item) => item.queries))],
+              };
+            };
+            expect({
+              quizzes: observedRoute('quizzes'),
+              notifications: observedRoute('notifications'),
+            }).toEqual({
+              // The quiz list reads the profile once for admission result visibility.
+              quizzes: { requests: 120, queryCounts: [mode ? 8 : 9] },
+              notifications: { requests: 120, queryCounts: [mode ? 5 : 6] },
+            });
           }
         }
       }
